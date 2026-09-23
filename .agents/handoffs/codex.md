@@ -124,6 +124,7 @@ Secret-literal scan outside ignored `.env` -> no matches.
 - Analytics checkpoint: `2be434e`
 - API checkpoint: `9a20718`
 - Browser-verified UI checkpoint: `fa0d11a`
+- Final reproducible documentation checkpoint: `4670ad5`
 - Pushed: Yes (`origin/main`)
 
 ## Risks / blockers
@@ -138,4 +139,4 @@ Secret-literal scan outside ignored `.env` -> no matches.
 - What they need to know: follow the root README literally; core outputs are offline and deterministic; `OpenAIKEY` is optional and unused; use the three documented demo GIDs and emphasize observed evidence/data limitations rather than accusations.
 
 ## Next exact action
-- Commit/push this final documentation checkpoint, record its SHA, and freeze non-blocking changes.
+- Freeze non-blocking changes; use the README demo path and fix only submission blockers.
