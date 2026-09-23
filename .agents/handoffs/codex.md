@@ -1,7 +1,17 @@
 # Codex Handoff
 
 ## Current goal
-Build the smallest complete, reproducible AML graph-analysis pipeline and investigation UI required by the HackAlem "Graph of Money" case.
+Extend the reproducible AML graph workspace for judge review: clearer graph/seed investigation, optional grounded OpenAI assistance and evals, and complete Russian documentation.
+
+## Current iteration design plan
+- Primary user: AML analyst starting with 81 known seed GIDs and tracing directed transfers to a review candidate.
+- Primary action: select a node or flow, follow exact GIDs, and inspect observed evidence while graph context remains visible.
+- Visual concept: the existing dark depth map stays central; seed rings and a strong selected-flow stroke show provenance and direction.
+- Palette and type: reuse existing ink/slate/amber/coral tokens and system sans + monospace GIDs; no new UI library.
+- Layout: retain queue | graph | evidence; add an optional compact assistant pane inside the evidence area, with local context and clickable cited GIDs.
+- Drag behavior: allow vertical repositioning within a node's depth lane so the lane headings keep their meaning.
+- Failure states: missing key, provider timeout/error, missing GID and insufficient graph evidence must be explicit.
+- Graph question: identify source, destination, amount and observed coverage of the selected edge. Empty results remain actionable.
 
 ## Challenge / scoring references
 - Required: one-command parquet-to-three-CSV pipeline under 5 minutes; roles/evidence for all 2,248 nodes; clustering; top >=20; directed graph UI with role/cluster highlighting and exact GID search.

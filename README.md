@@ -16,7 +16,7 @@ Money Graph превращает исходящую четырёхколенну
 
 Исходные данные: **2 248 узлов · 3 119 направленных потоков · 4 840 транзакций · 365 890 012,01 KZT наблюдаемого оборота**, 2026-07-01—2026-07-31.
 
-## Архитектура
+## Архитектура и путь данных
 
 ```mermaid
 flowchart LR
@@ -36,6 +36,22 @@ flowchart LR
 ```
 
 Required outputs работают офлайн и не используют LLM, GPU, database или internet service. `OpenAIKEY` зарезервирован для optional grounded assistant и текущим приложением не читается.
+
+```mermaid
+sequenceDiagram
+    participant Judge as Жюри / аналитик
+    participant UI as React + Cytoscape
+    participant API as FastAPI
+    participant CSV as Проверенные CSV + parquet
+    Judge->>UI: Поиск точного GID или выбор seed
+    UI->>API: Детали GID, ближайшие связи, ego graph
+    API->>CSV: Читает вычисленные роли и исходные потоки
+    CSV-->>API: Метрики, evidence, суммы и даты
+    API-->>UI: Строковые GID и наблюдаемые факты
+    UI-->>Judge: Направление потока, роль и ограничения покрытия
+```
+
+Граф строится из `edges.parquet`: `src → dst` сохраняет направление платежа, `sum_kzt` задаёт вес, `n_tx` — число транзакций. `nodes.parquet` добавляет 81 seed и глубину обхода, включая изолированные GID. `transactions.parquet` раскрывает даты и суммы выбранного ребра. Агрегация для кластеризации использует ненаправленную проекцию, но интерфейс и сведения о денежных потоках остаются направленными.
 
 ## Чистая установка
 
@@ -72,12 +88,12 @@ Pipeline completed in <5 minutes -> .../outputs
 Убедитесь, что порты `8000` и `5173` свободны, затем выполните:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run.ps1
+npm run dev
 ```
 
 Открыть [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite проксирует `/api` на `http://127.0.0.1:8000`.
 
-Один `Ctrl+C` в этом терминале останавливает оба сервиса и освобождает оба порта. Vite использует `strictPort`, поэтому не переезжает незаметно на `5174`, если старый frontend остался запущен.
+`npm run dev` вызывает проверенный Windows-скрипт [`run.ps1`](run.ps1). Один `Ctrl+C` в этом терминале останавливает оба сервиса и освобождает оба порта. Vite использует `strictPort`, поэтому не переезжает незаметно на `5174`, если старый frontend остался запущен.
 
 Отдельный запуск для debugging по-прежнему доступен:
 
@@ -96,7 +112,7 @@ npm run dev --prefix frontend
 При свободных портах `8000` и `5173`:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\qa.ps1
+npm run qa
 ```
 
 Команда последовательно запускает:
@@ -111,6 +127,17 @@ powershell -ExecutionPolicy Bypass -File .\qa.ps1
 8. Playwright E2E с автоматическим запуском backend/frontend.
 
 При успехе выводится `QA CHECKS PASSED`. Ошибки не скрываются.
+
+```mermaid
+flowchart LR
+    A[Сырые parquet] --> B[Pipeline + 3 CSV]
+    B --> C[Контрактный валидатор]
+    C --> D[Pytest: схема, инварианты, повторяемость, API]
+    D --> E[Ruff + Vitest + ESLint + production build]
+    E --> F[Playwright: реальный браузер и сценарий GID → поток → узел]
+```
+
+`npm run build` пересчитывает CSV и собирает production frontend. Время пересчёта, сборки и тестов выводится командами; ограничение организаторов **менее 5 минут** относится к полному пересчёту parquet → CSV, а не к `npm run qa`.
 
 Те же проверки по отдельности:
 
@@ -250,6 +277,10 @@ Product contract и scorecards сохраняются, implementation меняе
 - level-of-detail supernodes вместо передачи полного graph в browser.
 
 Database/distributed layer здесь не добавлены: 2 248 узлов помещаются в память, а pipeline уже значительно быстрее лимита.
+
+## Доступность развёрнутой версии
+
+Публичной deployed-версии пока нет. Жюри запускает проект локально по командам выше; все обязательные результаты и интерфейс доступны без внешних сервисов.
 
 ## Privacy и security
 
