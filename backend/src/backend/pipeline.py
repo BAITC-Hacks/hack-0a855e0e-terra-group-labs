@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import time
 from pathlib import Path
 
@@ -178,6 +179,9 @@ def assign_roles(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     result["role"] = role
     result["role_score"] = role_score.clip(0, 1)
     result["role_significance"] = specialist_max
+    for name in scores:
+        result[f"{name}_score"] = scores[name]
+    result["peripheral_score"] = (1 - specialist_max).clip(0, 1)
     structural = 0.40 * frame.pagerank_pct + 0.40 * frame.betweenness_pct + 0.20 * frame.degree_pct
     result["priority_score"] = (
         0.25 * structural
@@ -197,14 +201,18 @@ def compact_kzt(value: float) -> str:
     return f"{value:.0f}"
 
 
+def top_percent(percentile: float) -> int:
+    return max(1, math.ceil((1 - float(percentile)) * 100))
+
+
 def evidence(row: pd.Series) -> str:
     role_text = {
-        "consolidator": f"Консолидация: {row.in_deg} плательщиков, {row.seed_reach_count} seed-маршрутов, вход {compact_kzt(row.in_kzt)} KZT.",
-        "distributor": f"Распределение: {row.out_deg} получателей, {row.out_tx} переводов, выход {compact_kzt(row.out_kzt)} KZT.",
-        "transit": f"Транзит: вход {compact_kzt(row.in_kzt)}, выход {compact_kzt(row.out_kzt)} KZT, коэффициент {row.pass_through:.2f}.",
-        "terminal": f"Наблюдаемый сток: {row.in_deg} плательщиков, вход {compact_kzt(row.in_kzt)} KZT, depth={row.depth}<4, исходящих нет.",
-        "coordinator": f"Структурный кандидат: degree={row.in_deg + row.out_deg}, seed-маршрутов {row.seed_reach_count}, betweenness={row.betweenness:.4f}.",
-        "peripheral": f"Нет выраженной спецроли: in={row.in_deg}, out={row.out_deg}, оборот {compact_kzt(row.in_kzt + row.out_kzt)} KZT.",
+        "consolidator": f"Признаки консолидации: {row.in_deg} плательщиков (топ {top_percent(row.in_deg_pct)}%), {row.seed_reach_count} seed-ветвей; наблюдаемый вход {compact_kzt(row.in_kzt)} KZT.",
+        "distributor": f"Признаки распределения: {row.out_deg} получателей (топ {top_percent(row.out_deg_pct)}%), {row.out_tx} переводов; наблюдаемый выход {compact_kzt(row.out_kzt)} KZT.",
+        "transit": f"Признаки транзита: вход {compact_kzt(row.in_kzt)}, выход {compact_kzt(row.out_kzt)} KZT, соотношение {row.pass_through:.2f}; {row.seed_reach_count} seed-ветвей.",
+        "terminal": f"Кандидат в наблюдаемый сток: {row.in_deg} плательщиков, вход {compact_kzt(row.in_kzt)} KZT; depth={row.depth}<4, исходящих не видно.",
+        "coordinator": f"Структурный кандидат: связи={row.in_deg + row.out_deg}, betweenness топ {top_percent(row.betweenness_pct)}%, достижим из {row.seed_reach_count} seed-ветвей.",
+        "peripheral": f"Выраженная спецроль не выявлена: входящих связей {row.in_deg}, исходящих {row.out_deg}, наблюдаемый оборот {compact_kzt(row.in_kzt + row.out_kzt)} KZT.",
     }[row.role]
     if row.truncated_by_depth:
         role_text += " Depth=4: дальнейшие исходящие не наблюдаются."
@@ -240,6 +248,9 @@ def build_clusters(frame: pd.DataFrame, edges: pd.DataFrame) -> pd.DataFrame:
                 "n_nodes": len(group),
                 "n_seed": n_seed,
                 "sum_kzt_internal": float(turnover.get(cluster_id, 0)),
+                "max_priority": float(group.priority_score.max()),
+                "avg_priority": float(group.priority_score.mean()),
+                "top_role": str(group.role.value_counts().index[0]),
                 "top_gids": ";".join(map(str, top.index.astype(int))),
                 "hypothesis": hypothesis,
             }
@@ -254,7 +265,10 @@ def write_outputs(frame: pd.DataFrame, edges: pd.DataFrame, out_dir: Path) -> No
     columns = [
         "role", "role_score", "cluster_id", "priority_score", "evidence", "in_deg", "out_deg",
         "in_kzt", "out_kzt", "in_tx", "out_tx", "pagerank", "betweenness", "seed_reach_count",
-        "pass_through", "depth", "is_seed", "truncated_by_depth",
+        "pass_through", "depth", "is_seed", "truncated_by_depth", "in_deg_pct", "out_deg_pct",
+        "in_kzt_pct", "out_kzt_pct", "in_tx_pct", "out_tx_pct", "pagerank_pct", "betweenness_pct",
+        "seed_reach_pct", "degree_pct", "turnover_pct", "consolidator_score", "distributor_score",
+        "transit_score", "terminal_score", "coordinator_score", "peripheral_score",
     ]
     output.reset_index()[["gid", *columns]].to_csv(out_dir / "nodes_roles.csv", index=False)
     build_clusters(output, edges).to_csv(out_dir / "clusters.csv", index=False)

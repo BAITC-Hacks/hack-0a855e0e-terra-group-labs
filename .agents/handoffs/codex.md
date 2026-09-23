@@ -20,7 +20,7 @@ Build the smallest complete, reproducible AML graph-analysis pipeline and invest
 - Fixed the GID trust-boundary contract: identifiers exceed JavaScript safe integers, so API/UI transport `gid/src/dst` as exact decimal strings.
 
 ## In progress
-- Final documentation/checkpoint only; implementation and clean-start validation are complete.
+- Post-baseline AML workspace iteration from known-good `286073c`: discovery filters, relationship traversal, percentile explainability, Russian-first copy, cluster-level graph, network analytics, focused QA, and a one-command local launcher.
 
 ## Changed files
 
@@ -47,6 +47,15 @@ Build the smallest complete, reproducible AML graph-analysis pipeline and invest
 | `README.md` | Exact setup/run/check commands, architecture, scorecards, limitations, demo cases, scaling | Ready | Commands re-run from repository root |
 | `.env.example` | Safe placeholder for optional future `OpenAIKEY` use | Ready | Contains no secret |
 | `frontend/vite.config.ts` | Pin demo host to `127.0.0.1` and proxy API | Ready | Clean-start URL loaded |
+
+### Post-baseline iteration checkpoints
+
+- `backend/src/backend/pipeline.py`: preserves role/priority formulas; exports percentile and role-component diagnostics, strengthens numeric evidence, and adds cluster priority/role summaries.
+- `backend/src/backend/api.py`: adds deterministic node discovery filters, Russian coverage copy, role-component explanations, counterparty cluster metadata, `/api/cluster-graph`, and `/api/analytics`.
+- `tests/test_pipeline.py`: adds semantic role invariants, full output contracts, and byte-for-byte two-run reproducibility.
+- `tests/test_api.py`: adds discovery, GID string-safety, error, cluster-graph, and analytics regression checks.
+- `outputs/nodes_roles.csv`, `outputs/clusters.csv`: regenerated from the unchanged score formulas with the new diagnostic columns.
+- Validation: pipeline 1.03 s + validator PASS; pytest 2 passed; Ruff PASS. Only upstream FastAPI/Starlette TestClient deprecation warnings remain.
 
 Use exact repository-relative paths.
 
@@ -80,6 +89,17 @@ Use exact repository-relative paths.
 
 - Memorable element: depth-banded directed network with an ego-focus mode; labels appear only for the selected node and its neighbors.
 - Anti-template check: no hero, fake KPI cards, unused navigation, chat, gradients, or decorative charts.
+
+### Current UI iteration
+
+- Primary question remains “кого проверить первым и почему?”, with exact GID search preserved for the jury path.
+- Discovery: one compact `Фильтры` drawer produces an actionable result list; the header remains search-first rather than becoming a dense form.
+- Relationship traversal: counterparty is the primary row action; flow evidence is a separate explicit action, enabling node → relationship → node investigation.
+- Explainability: user-facing percentiles are expressed as `топ X%`; raw centrality is demoted from the primary view; role and priority are labelled as structural expression and review priority, never guilt probability.
+- Network views: the same canvas switches between GID nodes and deterministic cluster supernodes; five depth lanes remain the memorable visual and depth 4 is labelled as the observation boundary.
+- Analytics: compact evidence tables/bars below the workspace answer structure, cluster, signal, and inter-cluster-flow questions without a generic KPI dashboard or chart dependency.
+- Russian is the default product language; API/CSV role enums and technical commands remain unchanged.
+- Optional AI and light theme remain gated until deterministic discovery, navigation, cluster view, analytics, and QA are stable.
 
 ## Validation observed
 
