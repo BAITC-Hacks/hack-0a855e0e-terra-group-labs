@@ -15,9 +15,10 @@ Build the smallest complete, reproducible AML graph-analysis pipeline and invest
 - Created and pushed meaningful baseline commit `87e633b` with scaffold, organizer materials, extracted parquet data, and hygiene rules.
 - Installed parquet/graph analytics dependencies into the backend-managed environment and ran the organizer starter successfully.
 - Implemented the deterministic one-command pipeline, generated all three required CSV artifacts, and added a contract validator plus depth-boundary regression test.
+- Added the minimal read-only FastAPI contract required by the demo: summary, priorities, node details/neighbors, edge transactions, clusters, and full/filtered graph.
 
 ## In progress
-- Checkpointing the validated analytics core, then exposing the same outputs through the investigation API.
+- Checkpointing the API, then implementing the single-screen AML investigation workspace.
 
 ## Changed files
 
@@ -33,6 +34,9 @@ Build the smallest complete, reproducible AML graph-analysis pipeline and invest
 | `outputs/nodes_roles.csv` | Required 2,248-node role output plus diagnostics | Ready | Validator pass |
 | `outputs/clusters.csv` | Required deterministic cluster summaries/hypotheses | Ready | Validator pass |
 | `outputs/top_nodes.csv` | Top 50 ranked investigation candidates | Ready | Validator pass |
+| `backend/src/backend/api.py` | Demo-scoped read-only API over generated outputs/raw edge transactions | Ready | API contract test pass |
+| `backend/src/backend/__init__.py` | Start the local API with `uv run backend` | Ready | Import/TestClient pass |
+| `tests/test_api.py` | Summary, GID lookup, 404, edge transactions, ego graph | Ready | 2 total tests pass |
 
 Use exact repository-relative paths.
 
@@ -62,6 +66,8 @@ Organizer starter run -> EXPECTED FAIL before dependency install: `ModuleNotFoun
 `cd backend; uv run validate-outputs` -> PASS (`SUBMISSION VALIDATION PASSED`).
 `uv run --project backend pytest -q` -> PASS (1 passed in 1.99 s).
 `cd backend; uv run ruff check src ../tests` -> PASS.
+`uv run --project backend pytest -q` after API -> PASS (2 passed in 2.01 s; upstream TestClient deprecation warnings only).
+FastAPI TestClient `/api/summary` -> 2,248 nodes, 3,119 edges, 4,840 transactions, 365,890,012.01 KZT observed.
 Secret-literal scan outside ignored `.env` -> no matches.
 `git check-ignore` -> `.env`, backend `.venv`, frontend `node_modules`, ZIP archives, and `__MACOSX` metadata are excluded.
 ```
@@ -74,7 +80,8 @@ Secret-literal scan outside ignored `.env` -> no matches.
 ## Latest known-good Git state
 - Branch: `main`
 - Commit: `87e633b` (meaningful scaffold + organizer data baseline)
-- Dependency checkpoint: `99f2654`
+- Dependency checkpoint: `659a470`
+- Analytics checkpoint: `2be434e`
 - Pushed: Yes (`origin/main`)
 
 ## Risks / blockers
@@ -89,4 +96,4 @@ Secret-literal scan outside ignored `.env` -> no matches.
 - What they need to know: TBD
 
 ## Next exact action
-- Commit/push pipeline + generated outputs, then add read-only FastAPI endpoints for overview, graph, node, edge transactions, clusters, and top priorities.
+- Commit/push the API, then replace the Vite demo with the browser-verified single-screen AML workspace.
