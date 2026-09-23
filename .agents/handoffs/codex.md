@@ -20,7 +20,7 @@ Build the smallest complete, reproducible AML graph-analysis pipeline and invest
 - Fixed the GID trust-boundary contract: identifiers exceed JavaScript safe integers, so API/UI transport `gid/src/dst` as exact decimal strings.
 
 ## In progress
-- Checkpointing the browser-verified UI, then documenting clean-start execution, scorecards, limitations, architecture, and demo cases.
+- Final documentation/checkpoint only; implementation and clean-start validation are complete.
 
 ## Changed files
 
@@ -44,6 +44,9 @@ Build the smallest complete, reproducible AML graph-analysis pipeline and invest
 | `frontend/src/index.css` | Minimal global tokens/reset/accessibility | Ready | Browser inspected |
 | `frontend/vite.config.ts` | Local `/api` proxy | Ready | Live integration verified |
 | `frontend/package*.json` | Add Cytoscape and its TypeScript declarations | Ready | npm build/lint pass |
+| `README.md` | Exact setup/run/check commands, architecture, scorecards, limitations, demo cases, scaling | Ready | Commands re-run from repository root |
+| `.env.example` | Safe placeholder for optional future `OpenAIKEY` use | Ready | Contains no secret |
+| `frontend/vite.config.ts` | Pin demo host to `127.0.0.1` and proxy API | Ready | Clean-start URL loaded |
 
 Use exact repository-relative paths.
 
@@ -100,6 +103,11 @@ FastAPI TestClient `/api/summary` -> 2,248 nodes, 3,119 edges, 4,840 transaction
 `cd frontend; npm run lint` -> PASS.
 Browser QA at 1440x900 -> no horizontal overflow (`innerWidth == scrollWidth == 1440`); overview readable; exact depth-4 GID `100000000404740100` opened with explicit boundary warning; edge transaction detail and cluster 1 hypothesis opened successfully.
 Browser console after fixes -> no new errors/warnings; removed invalid Cytoscape HSL syntax and custom wheel sensitivity.
+Final clean setup: `uv sync --project backend --dev` PASS; `npm ci --prefix frontend` PASS, 0 vulnerabilities.
+Final pipeline: `uv run --project backend pipeline` PASS in 0.90 s; outputs reproduced byte-stably (`git diff -- outputs` empty).
+Final validator PASS; pytest 2 passed in 2.26 s; Ruff PASS; ESLint PASS; production build PASS in 399 ms (Cytoscape bundle-size advisory only).
+Final documented starts: `uv run --project backend backend` and `npm run dev --prefix frontend` both PASS; `http://127.0.0.1:5173` loaded 2,248 nodes / 3,119 flows.
+Final hygiene: no credential-like literals, task-critical TODO/FIXME, output drift, or horizontal overflow found.
 Secret-literal scan outside ignored `.env` -> no matches.
 `git check-ignore` -> `.env`, backend `.venv`, frontend `node_modules`, ZIP archives, and `__MACOSX` metadata are excluded.
 ```
@@ -114,6 +122,8 @@ Secret-literal scan outside ignored `.env` -> no matches.
 - Commit: `87e633b` (meaningful scaffold + organizer data baseline)
 - Dependency checkpoint: `659a470`
 - Analytics checkpoint: `2be434e`
+- API checkpoint: `9a20718`
+- Browser-verified UI checkpoint: `fa0d11a`
 - Pushed: Yes (`origin/main`)
 
 ## Risks / blockers
@@ -124,8 +134,8 @@ Secret-literal scan outside ignored `.env` -> no matches.
 - Role/priority scores are explainable heuristics for analyst attention, not guilt probabilities or ground-truth classifications.
 
 ## Handoff to
-- Agent/role: TBD
-- What they need to know: TBD
+- Agent/role: judges / demo presenter
+- What they need to know: follow the root README literally; core outputs are offline and deterministic; `OpenAIKEY` is optional and unused; use the three documented demo GIDs and emphasize observed evidence/data limitations rather than accusations.
 
 ## Next exact action
-- Commit/push the UI, then finish README, architecture diagram, `.env.example`, exact run commands, scorecard thresholds, limitations, scaling notes, and final clean-start audit.
+- Commit/push this final documentation checkpoint, record its SHA, and freeze non-blocking changes.
