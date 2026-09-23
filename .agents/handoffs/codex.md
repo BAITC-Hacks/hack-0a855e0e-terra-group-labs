@@ -154,6 +154,7 @@ Secret-literal scan outside ignored `.env` -> no matches.
 - Browser-verified UI checkpoint: `fa0d11a`
 - Final reproducible documentation checkpoint: `4670ad5`
 - Discovery/cluster analytics API checkpoint: `a25df2d`
+- Browser-verified AML workspace + QA checkpoint: `75f8ee0`
 - Pushed: Yes (`origin/main`)
 
 ## Risks / blockers
@@ -168,4 +169,4 @@ Secret-literal scan outside ignored `.env` -> no matches.
 - What they need to know: follow the root README literally; core outputs are offline and deterministic; `OpenAIKEY` is optional and unused; use the three documented demo GIDs and emphasize observed evidence/data limitations rather than accusations.
 
 ## Next exact action
-- Commit/push the browser-verified Russian AML workspace and freeze optional AI/light-theme work.
+- Freeze optional AI/light-theme work; use `run.ps1`, `qa.ps1`, and the Russian README for the demo unless a submission blocker appears.
