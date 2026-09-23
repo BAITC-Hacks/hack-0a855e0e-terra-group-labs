@@ -10,8 +10,13 @@ requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.141.1",
     "httpx>=0.28.1",
+    "networkx>=3.7",
+    "numpy>=2.5.3",
+    "pandas>=3.0.6",
+    "pyarrow>=25.0.1",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
+    "scipy>=1.18.1",
     "uvicorn>=0.53.0",
 ]
 

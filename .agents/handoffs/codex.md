@@ -12,9 +12,11 @@ Build the smallest complete, reproducible AML graph-analysis pipeline and invest
 - Read the official eight-page challenge PDF, organizer dataset README, starter code, repository instructions, and full user prompt.
 - Confirmed the existing pushed commit `e432645` only adds `.gitignore`; the starter and dataset remain untracked.
 - Verified no credential-like literals outside the ignored `.env`; the runtime variable name is `OpenAIKEY` and optional AI must not gate core outputs.
+- Created and pushed meaningful baseline commit `87e633b` with scaffold, organizer materials, extracted parquet data, and hygiene rules.
+- Installed parquet/graph analytics dependencies into the backend-managed environment and ran the organizer starter successfully.
 
 ## In progress
-- Establishing a meaningful baseline containing the allowed scaffold, organizer starter, extracted parquet data, and repository instructions while excluding local/generated artifacts.
+- Recording the dependency/runtime checkpoint, then implementing the deterministic pipeline from the organizer starter.
 
 ## Changed files
 
@@ -22,6 +24,8 @@ Build the smallest complete, reproducible AML graph-analysis pipeline and invest
 |---|---|---|---|
 | `.gitignore` | Ignore secrets, Python/Node caches, builds, raw archives, and macOS extraction metadata | Ready | `git status --ignored` inspection pending |
 | `.agents/handoffs/codex.md` | Record challenge contract and baseline state | Ready | Manual review |
+| `backend/pyproject.toml` | Add project-local graph/parquet dependencies | Ready | Organizer starter completed in 1.984 s |
+| `backend/uv.lock` | Lock resolved dependency versions | Ready | `uv add` completed |
 
 Use exact repository-relative paths.
 
@@ -45,22 +49,24 @@ Official PDF extracted successfully with bundled `pypdf`; 8 pages inspected.
 `cd backend; uv run backend` -> PASS (`Hello from backend!`).
 `cd frontend; npm run build` -> PASS (Vite production build, 20 modules, 291 ms).
 Organizer starter run -> EXPECTED FAIL before dependency install: `ModuleNotFoundError: No module named 'numpy'`.
+`uv add numpy pandas pyarrow networkx scipy` -> PASS; installed numpy 2.5.3, pandas 3.0.6, pyarrow 25.0.1, networkx 3.7, scipy 1.18.1.
+`PYTHONUTF8=1 uv run python organizer/starter.py ...` -> PASS in 1.984 s; generated 2,248-row placeholder `nodes_roles.csv`, empty `clusters.csv`, empty `top_nodes.csv` as designed.
 Secret-literal scan outside ignored `.env` -> no matches.
 `git check-ignore` -> `.env`, backend `.venv`, frontend `node_modules`, ZIP archives, and `__MACOSX` metadata are excluded.
 ```
 
 ## Runtime / environment changes
-- Dependencies added/removed: None yet; pandas, pyarrow, networkx, and numpy will be added to the backend environment after baseline.
+- Dependencies added/removed: added numpy, pandas, pyarrow, networkx, scipy to the backend project; scipy is required by NetworkX PageRank but absent from the organizer root requirements.
 - Environment variables added/changed: documented name will be `OpenAIKEY`; `.env` remains ignored and was not read.
 - Services/deployment changes: None
 
 ## Latest known-good Git state
 - Branch: `main`
-- Commit: `e432645` (incomplete baseline; `.gitignore` only)
+- Commit: `87e633b` (meaningful scaffold + organizer data baseline)
 - Pushed: Yes (`origin/main`)
 
 ## Risks / blockers
-- Reproduced the dependency blocker: organizer starter cannot import `numpy` in the backend `uv` environment. Next increment installs the four task-required packages there.
+- The organizer starter prints a Unicode arrow that fails under the host CP1251 console; project commands must force UTF-8 or avoid that character. No dependency blocker remains.
 
 ## Known limitations
 - None yet.
@@ -70,4 +76,4 @@ Secret-literal scan outside ignored `.env` -> no matches.
 - What they need to know: TBD
 
 ## Next exact action
-- Inspect ignored/untracked files, commit the meaningful baseline, push it, then install/sync graph and parquet dependencies with `uv` and run the organizer starter against `data_for_case/data (1)/data`.
+- Commit/push the locked dependency increment, inspect real feature distributions, then implement the one-command deterministic pipeline and validator.
