@@ -44,6 +44,7 @@ test('cluster filter обновляет граф и summary', async ({ page }) =
 test('depth-4 boundary показана без terminal-утверждения', async ({ page }) => {
   await search(page, boundary)
   await expect(page.getByTestId('coverage-warning')).toContainText('граница наблюдения')
+  await expect(page.getByTestId('coverage-warning')).toContainText('исходящие переводы за пределами 4-го колена')
   await expect(page.getByTestId('node-detail')).not.toContainText('Кандидат в конечный узел')
 })
 
@@ -71,6 +72,7 @@ test('81 стартовых клиента доступны отдельной �
   await expect(page.locator('.queue-row')).toHaveCount(81)
   await page.locator('.queue-row').first().click()
   await expect(page.getByTestId('node-detail')).toContainText('стартовый · ранее выявленный')
+  await expect(page.getByTestId('coverage-warning')).toContainText('полную историю входящих переводов')
 })
 
 test('межкластерный поток открывает выделенное направление и долю seed', async ({ page }) => {
