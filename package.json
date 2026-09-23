@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "dev": "powershell -ExecutionPolicy Bypass -File .\\run.ps1",
-    "qa": "powershell -ExecutionPolicy Bypass -File .\\qa.ps1",
-    "build": "uv run --project backend pipeline && npm run build --prefix frontend"
+    "qa": "node scripts/qa.mjs",
+    "build": "uv run --project backend pipeline && npm run build --prefix frontend",
+    "start": "npm run build && uv run --project backend backend"
   }
 }

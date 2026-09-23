@@ -26,6 +26,9 @@ def test_pipeline_contract_and_depth_boundary(tmp_path):
     assert roles.role_score.between(0, 1).all() and roles.priority_score.between(0, 1).all()
     assert roles.evidence.str.len().between(1, 200).all()
     assert set(roles.cluster_id) <= set(clusters.cluster_id)
+    assert not ((clusters.n_seed > 0) & clusters.hypothesis.str.contains("без стартовых")).any()
+    isolated_seed = clusters[(clusters.n_nodes == 1) & (clusters.n_seed == 1)]
+    assert isolated_seed.hypothesis.str.contains("без наблюдаемых связей").all()
     assert len(top) >= 20 and top.priority_score.is_monotonic_decreasing
     assert top["rank"].tolist() == list(range(1, len(top) + 1))
 

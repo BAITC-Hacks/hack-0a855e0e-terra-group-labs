@@ -27,6 +27,12 @@ test('поток позволяет перейти к контрагенту', a
   const before = await page.getByTestId('node-detail').locator('h2').textContent()
   await page.getByRole('button', { name: 'Открыть отправителя' }).click()
   await expect(page.getByTestId('node-detail').locator('h2')).not.toHaveText(before ?? '')
+  await expect(page.getByRole('button', { name: '← К потоку GID' })).toBeVisible()
+  await page.goBack()
+  await expect(page.getByTestId('node-detail').locator('h2')).toHaveText(before ?? '')
+  await expect(page.getByTestId('flow-detail')).toBeVisible()
+  await page.getByRole('button', { name: 'Открыть получателя' }).click()
+  await expect(page.getByRole('button', { name: '← К потоку GID' })).toBeVisible()
 })
 
 test('cluster filter обновляет граф и summary', async ({ page }) => {
@@ -59,20 +65,46 @@ test('Russian-first UI и cluster-level view доступны', async ({ page })
   await expect(page.getByTestId('cluster-detail')).toBeVisible()
 })
 
-test('81 seed доступны отдельной очередью и отмечены в карточке', async ({ page }) => {
-  await page.getByRole('button', { name: 'Seed 81' }).click()
+test('81 стартовых клиента доступны отдельной очередью и отмечены в карточке', async ({ page }) => {
+  await page.getByRole('button', { name: 'Стартовые 81' }).click()
   await expect(page.getByRole('heading', { name: 'Стартовые клиенты' })).toBeVisible()
   await expect(page.locator('.queue-row')).toHaveCount(81)
   await page.locator('.queue-row').first().click()
-  await expect(page.getByTestId('node-detail')).toContainText('seed · ранее выявленный')
+  await expect(page.getByTestId('node-detail')).toContainText('стартовый · ранее выявленный')
 })
 
 test('межкластерный поток открывает выделенное направление и долю seed', async ({ page }) => {
   await page.getByRole('button', { name: 'Межкластерные потоки' }).click()
   await page.locator('button.flow-table').first().click()
   await expect(page.getByTestId('cluster-flow-detail')).toContainText('выделен на графе')
-  await expect(page.getByTestId('cluster-flow-detail')).toContainText('Отправитель — seed')
+  await expect(page.getByTestId('cluster-flow-detail')).toContainText('Отправитель — ранее выявленный клиент')
   await expect(page.getByLabel('Направленная сеть кластеров')).toBeVisible()
+})
+
+test('топ группы открывает кластер, а назад возвращает к межкластерному потоку', async ({ page }) => {
+  await page.getByRole('button', { name: 'Кластеры', exact: true }).last().click()
+  await page.locator('.cluster-leaders button').first().click()
+  await expect(page.getByTestId('cluster-detail')).toBeVisible()
+  await expect(page.getByLabel('Направленная сеть кластеров')).toBeVisible()
+  await page.getByRole('button', { name: 'Межкластерные потоки' }).click()
+  await page.locator('button.flow-table').first().click()
+  const flow = page.getByTestId('cluster-flow-detail')
+  await flow.getByRole('button', { name: 'Узлы отправителя' }).click()
+  await expect(page.getByRole('button', { name: /К потоку К/ })).toBeVisible()
+  await page.goBack()
+  await expect(flow).toBeVisible()
+  await flow.getByRole('button', { name: 'Узлы получателя' }).click()
+  await expect(page.getByRole('button', { name: /К потоку К/ })).toBeVisible()
+})
+
+test('прямая связь со стартовым клиентом выделена в карточке', async ({ page }) => {
+  const graph = await (await page.request.get('/api/graph')).json() as { nodes: { gid: string; is_seed: boolean }[]; edges: { src: string; dst: string }[] }
+  const seed = new Set(graph.nodes.filter((node) => node.is_seed).map((node) => node.gid))
+  const flow = graph.edges.find((edge) => seed.has(edge.src) && !seed.has(edge.dst))
+  expect(flow).toBeDefined()
+  await search(page, flow!.dst)
+  await expect(page.locator('.seed-link-notice')).toContainText('прямая наблюдаемая связь')
+  await expect(page.locator('.relation-row.seed-related').first()).toBeVisible()
 })
 
 test('AI помощник открывается рядом с доступным графом', async ({ page }) => {

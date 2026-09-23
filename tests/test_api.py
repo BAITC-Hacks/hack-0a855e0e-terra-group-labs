@@ -1,4 +1,4 @@
-from backend.api import app, edges, roles
+from backend.api import app, edges, roles, seed_gids
 from fastapi.testclient import TestClient
 
 client = TestClient(app)
@@ -40,6 +40,10 @@ def test_demo_api_contract():
     assert cluster_graph.json()["nodes"] and cluster_graph.json()["edges"]
     assert all(0 <= item["seed_tx_share"] <= 1 for item in cluster_graph.json()["nodes"])
     assert all(0 <= item["seed_tx_share"] <= 1 for item in cluster_graph.json()["edges"])
+    linked = next(edges.loc[edges.src.isin(seed_gids) | edges.dst.isin(seed_gids)].itertuples(index=False))
+    assert client.get(f"/api/nodes/{int(linked.src)}").json()["has_seed_link"]
+    assert client.get(f"/api/nodes/{int(linked.dst)}").json()["has_seed_link"]
+    assert any(item["has_seed_link"] for item in cluster_graph.json()["nodes"])
     assert sum(item["seed_out_tx"] for item in cluster_graph.json()["nodes"]) == int(
         edges.loc[edges.src.isin(roles.loc[roles.is_seed, "gid"]), "n_tx"].sum()
     )

@@ -4,10 +4,10 @@ import './App.css'
 import { depthLabel, formatGid, kzt, roleColors, roleNames, score100, sortClusters, topPercent, type ClusterSortKey } from './domain'
 
 type Summary = { nodes: number; edges: number; transactions: number; observed_turnover_kzt: number; clusters: number; role_counts: Record<string, number> }
-type GraphNode = { gid: string; role: string; role_score: number; priority_score: number; cluster_id: number; depth: number; is_seed: boolean; truncated_by_depth: boolean }
+type GraphNode = { gid: string; role: string; role_score: number; priority_score: number; cluster_id: number; depth: number; is_seed: boolean; has_seed_link: boolean; truncated_by_depth: boolean }
 type GraphEdge = { src: string; dst: string; sum_kzt: number; n_tx: number }
 type GraphData = { nodes: GraphNode[]; edges: GraphEdge[] }
-type TopNode = { rank: number; gid: string; role: string; priority_score: number; why: string; is_seed: boolean }
+type TopNode = { rank: number; gid: string; role: string; priority_score: number; why: string; is_seed: boolean; has_seed_link: boolean }
 type RoleComponent = { label: string; value: number | null; percentile: number | null }
 type NodeDetail = GraphNode & {
   evidence: string; in_deg: number; out_deg: number; in_kzt: number; out_kzt: number; in_tx: number; out_tx: number
@@ -20,7 +20,7 @@ type EdgeDetail = GraphEdge & { first_date: string; last_date: string; transacti
 type ClusterNode = { gid: string; role: string; role_score: number; priority_score: number; evidence: string }
 type Cluster = {
   cluster_id: number; n_nodes: number; n_seed: number; sum_kzt_internal: number; max_priority: number
-  avg_priority: number; top_role: string; top_gids: string; hypothesis: string; seed_out_tx: number; seed_tx_share: number; nodes?: ClusterNode[]
+  avg_priority: number; top_role: string; top_gids: string; hypothesis: string; seed_out_tx: number; seed_tx_share: number; has_seed_link: boolean; nodes?: ClusterNode[]
 }
 type ClusterEdge = { src_cluster: number; dst_cluster: number; sum_kzt: number; n_tx: number; n_edges: number; seed_tx: number; seed_tx_share: number }
 type ClusterGraph = { nodes: (Cluster & { id: string; role_counts: Record<string, number> })[]; edges: ClusterEdge[] }
@@ -114,11 +114,11 @@ function App() {
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Не удалось загрузить сеть') }
   }, [])
 
-  const showClusterNodes = useCallback(async (clusterId: number) => {
+  const showClusterNodes = useCallback(async (clusterId: number, fromFlow = false) => {
     if (!clusterId) return void showOverview()
     try {
       const [data, detail] = await Promise.all([getJson<GraphData>(`/api/graph?cluster_id=${clusterId}`), getJson<Cluster>(`/api/clusters/${clusterId}`)])
-      setGraph(data); setCluster(detail); setSelected(null); setEdge(null); setClusterEdge(null); setGraphLevel('nodes'); setMode('cluster')
+      setGraph(data); setCluster(detail); setSelected(null); setEdge(null); if (!fromFlow) setClusterEdge(null); setGraphLevel('nodes'); setMode('cluster')
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Не удалось загрузить кластер') }
   }, [showOverview])
 
@@ -133,6 +133,40 @@ function App() {
       if (initial) { setCluster(initial); await selectCluster(initial.cluster_id) }
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Не удалось загрузить кластеры') }
   }, [clusters, selectCluster])
+
+  const openClusterOnGraph = useCallback(async (clusterId: number) => {
+    try {
+      setGraphLevel('clusters'); setClusterEdge(null); await selectCluster(clusterId)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Не удалось открыть кластер') }
+  }, [selectCluster])
+
+  const drillClusterFromFlow = (clusterId: number) => {
+    if (clusterEdge) {
+      window.history.replaceState({ clusterFlow: clusterEdge }, '')
+      window.history.pushState({ clusterNodes: clusterId }, '', `#cluster-${clusterId}`)
+    }
+    void showClusterNodes(clusterId, Boolean(clusterEdge))
+  }
+
+  const navigateNodeFromFlow = (gid: string) => {
+    if (!selected || !edge) return
+    window.history.replaceState({ nodeFlow: { gid: selected.gid, src: edge.src, dst: edge.dst } }, '')
+    window.history.pushState({ nodeDestination: gid }, '', `#gid-${gid}`)
+    void showNode(gid)
+  }
+
+  useEffect(() => {
+    const restoreFlow = (event: PopStateEvent) => {
+      const clusterFlow = event.state?.clusterFlow as ClusterEdge | undefined
+      const nodeFlow = event.state?.nodeFlow as { gid: string; src: string; dst: string } | undefined
+      if (clusterFlow) { setClusterEdge(clusterFlow); setCluster(null); setGraphLevel('clusters'); setSelected(null) }
+      else if (nodeFlow) { void showNode(nodeFlow.gid).then(() => showEdge(nodeFlow.src, nodeFlow.dst)) }
+      else if (event.state?.nodeDestination) { void showNode(event.state.nodeDestination) }
+    }
+    window.addEventListener('popstate', restoreFlow)
+    return () => window.removeEventListener('popstate', restoreFlow)
+  }, [showNode, showEdge])
 
   const askSummary = async () => {
     if (!selected) return
@@ -184,16 +218,20 @@ function App() {
           label: graphLevel === 'clusters' ? 'data(label)' : '', color: '#dce4eb', 'font-size': '8px',
           'text-background-color': '#0b0f14', 'text-background-opacity': graphLevel === 'clusters' ? 0.72 : 0, 'text-background-padding': '2px',
         } },
+        { selector: 'node[?has_seed_link]', style: { 'border-color': '#ef6a62', 'border-width': 3, opacity: 1 } },
         { selector: 'edge', style: {
           width: 'data(width)', 'line-color': '#51606d', 'target-arrow-color': '#7e8b97', 'target-arrow-shape': 'triangle',
           'curve-style': 'bezier', opacity: graphLevel === 'clusters' ? 0.52 : mode === 'overview' ? 0.17 : 0.55,
         } },
-        { selector: 'node[?is_seed]', style: { 'border-color': '#f3b33d', 'border-width': 3, opacity: 1 } },
-        { selector: 'edge[?seed_origin]', style: { 'line-color': '#ad8440', 'target-arrow-color': '#e7ac4a', opacity: mode === 'overview' ? 0.45 : 0.75 } },
+        { selector: 'node[?is_seed]', style: { 'border-color': '#ef6a62', 'border-width': 4, opacity: 1 } },
+        { selector: 'edge[?seed_related]', style: { 'line-color': '#bf4f4a', 'target-arrow-color': '#ef6a62', opacity: mode === 'overview' ? 0.52 : 0.8 } },
         { selector: 'edge.flow-muted', style: { opacity: 0.07 } },
         { selector: 'edge.related-flow', style: { 'line-color': '#ca9451', 'target-arrow-color': '#e3ad5e', opacity: 0.85, width: 2 } },
+        { selector: 'edge[?seed_related].related-flow', style: { 'line-color': '#df625a', 'target-arrow-color': '#ef6a62' } },
         { selector: 'edge.active-flow', style: { 'line-color': '#ffcb62', 'target-arrow-color': '#ffcb62', 'target-arrow-shape': 'triangle', opacity: 1, width: 5, 'z-index': 999 } },
+        { selector: 'edge.active-seed-flow', style: { 'line-color': '#ff6960', 'target-arrow-color': '#ff6960', 'target-arrow-shape': 'triangle', opacity: 1, width: 5, 'z-index': 999 } },
         { selector: 'node.flow-endpoint', style: { 'border-color': '#ffcb62', 'border-width': 5, opacity: 1, 'z-index': 999 } },
+        { selector: 'node.seed-flow-endpoint', style: { 'border-color': '#ff6960', 'border-width': 5, opacity: 1, 'z-index': 999 } },
         { selector: ':selected', style: {
           'border-color': '#fff3d6', 'border-width': 4, opacity: 1, label: 'data(label)', color: '#f7f8fa', 'font-size': '10px',
           'text-background-color': '#0b0f14', 'text-background-opacity': 0.9, 'text-background-padding': '3px',
@@ -220,7 +258,7 @@ function App() {
   useEffect(() => {
     const instance = cy.current
     if (!instance) return
-    instance.elements().unselect().removeClass('flow-muted related-flow active-flow flow-endpoint')
+    instance.elements().unselect().removeClass('flow-muted related-flow active-flow active-seed-flow flow-endpoint seed-flow-endpoint')
     const selectedId = graphLevel === 'clusters' ? cluster && `cluster-${cluster.cluster_id}` : selected?.gid
     if (selectedId) {
       const node = instance.$id(selectedId)
@@ -234,8 +272,9 @@ function App() {
       const active = instance.$id(activeId)
       if (active.length) {
         instance.edges().addClass('flow-muted')
-        active.removeClass('flow-muted related-flow').addClass('active-flow')
-        active.connectedNodes().addClass('flow-endpoint')
+        const seedRelated = graphLevel === 'clusters' ? Number(active.data('seed_tx')) > 0 : Boolean(active.data('seed_related'))
+        active.removeClass('flow-muted related-flow').addClass(seedRelated ? 'active-seed-flow' : 'active-flow')
+        active.connectedNodes().addClass(seedRelated ? 'seed-flow-endpoint' : 'flow-endpoint')
       }
     }
   }, [cluster, clusterEdge, edge, graph, graphLevel, selected])
@@ -280,18 +319,18 @@ function App() {
     {error && <div className="error" role="alert">{error}<button onClick={() => setError('')} aria-label="Закрыть ошибку">×</button></div>}
 
     <section className="workspace">
-      <aside className="queue panel"><div className="panel-title"><div><p>Очередь аналитика</p><h2>{queueMode === 'seed' ? 'Стартовые клиенты' : 'Приоритеты проверки'}</h2></div><span>{queueMode === 'seed' ? seedNodes.length : 50}</span></div><div className="queue-switch"><button className={queueMode === 'priority' ? 'active' : ''} onClick={() => setQueueMode('priority')}>Топ 50</button><button className={queueMode === 'seed' ? 'active' : ''} onClick={() => void showSeedQueue()}>Seed 81</button></div><div className="queue-list">{queueItems.map((node) => <button key={node.gid} className={selected?.gid === node.gid ? 'queue-row active' : 'queue-row'} onClick={() => void showNode(node.gid)}><span className="rank">{String(node.rank).padStart(2, '0')}</span><span className="queue-main"><b>GID {node.gid}</b><small><i style={{ background: roleColors[node.role] }} />{roleNames[node.role]}{node.is_seed && <em className="seed-tag">seed</em>}</small></span><strong>{score100(node.priority_score)}</strong></button>)}</div></aside>
+      <aside className="queue panel"><div className="panel-title"><div><p>Очередь аналитика</p><h2>{queueMode === 'seed' ? 'Стартовые клиенты' : 'Приоритеты проверки'}</h2></div><span>{queueMode === 'seed' ? seedNodes.length : 50}</span></div><div className="queue-switch"><button className={queueMode === 'priority' ? 'active' : ''} onClick={() => setQueueMode('priority')}>Топ 50</button><button className={queueMode === 'seed' ? 'active' : ''} onClick={() => void showSeedQueue()}>Стартовые 81</button></div><p className="queue-explain">Стартовые (seed) — 81 ранее выявленный клиент. Красный отмечает прямую наблюдаемую связь; это не вывод о виновности других узлов.</p><div className="queue-list">{queueItems.map((node) => <button key={node.gid} className={selected?.gid === node.gid ? 'queue-row active' : 'queue-row'} onClick={() => void showNode(node.gid)}><span className="rank">{String(node.rank).padStart(2, '0')}</span><span className="queue-main"><b>GID {node.gid}</b><small><i style={{ background: roleColors[node.role] }} />{roleNames[node.role]}{node.is_seed ? <em className="seed-tag">ранее выявленный</em> : node.has_seed_link && <em className="seed-link-tag">прямая связь</em>}</small></span><strong>{score100(node.priority_score)}</strong></button>)}</div></aside>
 
       <section className="graph-panel panel">
-        <div className="graph-toolbar"><div><p>Наблюдаемая сеть</p><h2>{graphLevel === 'clusters' ? 'Структура кластеров' : mode === 'focus' ? `Окружение GID ${selected?.gid}` : mode === 'cluster' ? `Кластер ${cluster?.cluster_id}` : 'Четыре колена переводов'}</h2></div><div className="graph-actions"><div className="view-switch" aria-label="Уровень графа"><button className={graphLevel === 'nodes' ? 'active' : ''} onClick={() => void showOverview()}>Узлы</button><button data-testid="cluster-view" className={graphLevel === 'clusters' ? 'active' : ''} onClick={() => void showClusterGraph()}>Кластеры</button></div>{graphLevel === 'nodes' && <select aria-label="Фильтр по кластеру" value={cluster?.cluster_id ?? ''} onChange={(event) => void showClusterNodes(Number(event.target.value))}><option value="">Все кластеры</option>{clusters.map((item) => <option key={item.cluster_id} value={item.cluster_id}>Кластер {item.cluster_id} · {item.n_nodes}</option>)}</select>}{graphLevel === 'nodes' && mode !== 'overview' && <button className="ghost" onClick={() => void showOverview()}>Вся сеть</button>}<button className="ghost assistant-toggle" onClick={() => setAiOpen(true)}>AI помощник</button></div></div>
-        {graphLevel === 'nodes' && cluster && <p className="cluster-note"><b>{cluster.n_seed} seed · {kzt.format(cluster.sum_kzt_internal)} KZT внутри.</b> {cluster.hypothesis}</p>}
+        <div className="graph-toolbar"><div><p>Наблюдаемая сеть</p><h2>{graphLevel === 'clusters' ? 'Структура кластеров' : mode === 'focus' ? `Окружение GID ${selected?.gid}` : mode === 'cluster' ? `Кластер ${cluster?.cluster_id}` : 'Четыре колена переводов'}</h2></div><div className="graph-actions"><div className="view-switch" aria-label="Уровень графа"><button className={graphLevel === 'nodes' ? 'active' : ''} onClick={() => void showOverview()}>Узлы</button><button data-testid="cluster-view" className={graphLevel === 'clusters' ? 'active' : ''} onClick={() => void showClusterGraph()}>Кластеры</button></div>{graphLevel === 'nodes' && <select aria-label="Фильтр по кластеру" value={cluster?.cluster_id ?? ''} onChange={(event) => void showClusterNodes(Number(event.target.value))}><option value="">Все кластеры</option>{clusters.map((item) => <option key={item.cluster_id} value={item.cluster_id}>Кластер {item.cluster_id} · {item.n_nodes}</option>)}</select>}{graphLevel === 'nodes' && clusterEdge && <button className="ghost" onClick={() => window.history.back()}>← К потоку К{clusterEdge.src_cluster}→К{clusterEdge.dst_cluster}</button>}{graphLevel === 'nodes' && selected && window.history.state?.nodeDestination === selected.gid && <button className="ghost" onClick={() => window.history.back()}>← К потоку GID</button>}{graphLevel === 'nodes' && mode !== 'overview' && <button className="ghost" onClick={() => void showOverview()}>Вся сеть</button>}<button className="ghost assistant-toggle" onClick={() => setAiOpen(true)}>AI помощник</button></div></div>
+        {graphLevel === 'nodes' && cluster && <p className="cluster-note"><b>{cluster.n_seed} стартовых клиентов · {kzt.format(cluster.sum_kzt_internal)} KZT внутри.</b> {cluster.has_seed_link && <em>Есть прямая связь с ранее выявленными. </em>}{cluster.hypothesis}</p>}
         {graphLevel === 'nodes' && <div className="depth-axis">{[0, 1, 2, 3, 4].map((depth) => <span key={depth} className={depth === 4 ? 'boundary' : ''}>{depthLabel(depth)}</span>)}</div>}
         {!graph && !error && <div className="loading">Загрузка наблюдаемых потоков…</div>}
         <div className={graphLevel === 'nodes' ? 'graph depth-zones' : 'graph'} ref={graphElement} aria-label={graphLevel === 'nodes' ? 'Направленная сеть транзакций' : 'Направленная сеть кластеров'} />
-        <div className="graph-status">{graphLevel === 'nodes' ? <><span>{graph?.nodes.length.toLocaleString('ru-RU') ?? 0} узлов</span><span>{graph?.edges.length.toLocaleString('ru-RU') ?? 0} направленных потоков</span><span><i className="seed-legend" /> seed-узлы</span></> : <><span>{clusterGraph?.nodes.length ?? 0} кластеров</span><span>{clusterGraph?.edges.length ?? 0} межкластерных потоков</span></>}<span>{graphLevel === 'nodes' ? 'Колесо — масштаб · узлы перемещаются внутри колена' : 'Колесо — масштаб · кластеры можно перемещать'}</span></div>
+        <div className="graph-status">{graphLevel === 'nodes' ? <><span>{graph?.nodes.length.toLocaleString('ru-RU') ?? 0} узлов</span><span>{graph?.edges.length.toLocaleString('ru-RU') ?? 0} направленных потоков</span><span><i className="seed-legend" /> красный — прямая связь со стартовым клиентом</span></> : <><span>{clusterGraph?.nodes.length ?? 0} кластеров</span><span>{clusterGraph?.edges.length ?? 0} межкластерных потоков</span></>}<span>{graphLevel === 'nodes' ? 'Колесо — масштаб · узлы перемещаются внутри колена' : 'Колесо — масштаб · кластеры можно перемещать'}</span></div>
       </section>
 
-      <aside className="detail panel">{graphLevel === 'clusters' ? <ClusterDetail cluster={cluster} edge={clusterEdge} onNode={showNode} onClusterNodes={showClusterNodes} /> : <NodePanel selected={selected} neighbors={neighbors} edge={edge} onNode={showNode} onEdge={showEdge} onCloseEdge={() => setEdge(null)} onSummary={askSummary} aiAvailable={aiAvailable} aiBusy={aiBusy} aiSummary={aiSummary && aiSummary.gid === selected?.gid ? aiSummary.reply : null} aiError={aiError} />}</aside>
+      <aside className="detail panel">{graphLevel === 'clusters' ? <ClusterDetail cluster={cluster} edge={clusterEdge} onNode={showNode} onClusterNodes={drillClusterFromFlow} /> : <NodePanel key={selected?.gid ?? 'empty'} selected={selected} neighbors={neighbors} edge={edge} onNode={showNode} onFlowNode={navigateNodeFromFlow} onEdge={showEdge} onCloseEdge={() => setEdge(null)} onSummary={askSummary} aiAvailable={aiAvailable} aiBusy={aiBusy} aiSummary={aiSummary && aiSummary.gid === selected?.gid ? aiSummary.reply : null} aiError={aiError} />}</aside>
     </section>
 
     {aiOpen && <aside className="assistant-drawer" aria-label="AI помощник аналитика" data-testid="assistant-panel">
@@ -313,7 +352,7 @@ function App() {
       <p className="assistant-privacy">Во внешний API передаются вопрос, до шести прошлых реплик, метрики выбранных GID и до 16 потоков; полный parquet не отправляется. Ответ — гипотеза.</p>
     </aside>}
 
-    <AnalyticsSection summary={summary} analytics={analytics} clusters={visibleClusters} clusterGraph={clusterGraph} tab={analyticsTab} setTab={setAnalyticsTab} sort={clusterSort} setSort={setClusterSort} minNodes={clusterMinNodes} setMinNodes={setClusterMinNodes} minSeeds={clusterMinSeeds} setMinSeeds={setClusterMinSeeds} onCluster={showClusterNodes} onNode={showNode} onFlow={(flow) => { setGraphLevel('clusters'); setClusterEdge(flow); setCluster(null); window.scrollTo({ top: 0, behavior: 'smooth' }) }} />
+    <AnalyticsSection summary={summary} analytics={analytics} clusters={visibleClusters} clusterGraph={clusterGraph} tab={analyticsTab} setTab={setAnalyticsTab} sort={clusterSort} setSort={setClusterSort} minNodes={clusterMinNodes} setMinNodes={setClusterMinNodes} minSeeds={clusterMinSeeds} setMinSeeds={setClusterMinSeeds} onCluster={openClusterOnGraph} onNode={showNode} onFlow={(flow) => { setGraphLevel('clusters'); setClusterEdge(flow); setCluster(null); window.scrollTo({ top: 0, behavior: 'smooth' }) }} />
 
     <footer className="coverage"><div><b>Покрытие, а не вердикт.</b><span>Score определяет приоритет проверки только внутри наблюдаемого графа.</span></div><ul><li>Только исходящий обход</li><li>Граница на 4-м колене</li><li>Переводы &lt;5 000 KZT не видны</li><li>Входящие seed неполны</li></ul><div className="legend">{Object.entries(roleColors).map(([role, color]) => <span key={role}><i style={{ background: color }} />{roleNames[role]}</span>)}</div></footer>
   </main>
@@ -323,11 +362,11 @@ function nodeElements(graph: GraphData) {
   const counts = new Map<number, number>(), totals = new Map<number, number>()
   const seedSet = new Set(graph.nodes.filter((node) => node.is_seed).map((node) => node.gid))
   graph.nodes.forEach((node) => totals.set(node.depth, (totals.get(node.depth) ?? 0) + 1))
-  return [...graph.nodes.map((node) => { const index = counts.get(node.depth) ?? 0; counts.set(node.depth, index + 1); const count = totals.get(node.depth) ?? 1; const x = 90 + node.depth * 220 + ((index * 37) % 90) - 45; const y = 55 + (index * Math.max(5, 590 / count)) % 590; return { data: { id: node.gid, label: node.gid, ...node, color: roleColors[node.role], clusterColor: `hsl(${(node.cluster_id * 47) % 360}, 48%, 58%)`, homeX: x, homeY: y }, position: { x, y } } }), ...graph.edges.map((flow) => ({ data: { id: `${flow.src}-${flow.dst}`, source: flow.src, target: flow.dst, ...flow, seed_origin: seedSet.has(flow.src), width: Math.max(0.6, Math.log10(flow.sum_kzt) - 3) } }))]
+  return [...graph.nodes.map((node) => { const index = counts.get(node.depth) ?? 0; counts.set(node.depth, index + 1); const count = totals.get(node.depth) ?? 1; const x = 90 + node.depth * 220 + ((index * 37) % 90) - 45; const y = 55 + (index * Math.max(5, 590 / count)) % 590; return { data: { id: node.gid, label: node.gid, ...node, color: roleColors[node.role], clusterColor: `hsl(${(node.cluster_id * 47) % 360}, 48%, 58%)`, homeX: x, homeY: y }, position: { x, y } } }), ...graph.edges.map((flow) => ({ data: { id: `${flow.src}-${flow.dst}`, source: flow.src, target: flow.dst, ...flow, seed_related: seedSet.has(flow.src) || seedSet.has(flow.dst), width: Math.max(0.6, Math.log10(flow.sum_kzt) - 3) } }))]
 }
 
 function clusterElements(graph: ClusterGraph) {
-  return [...graph.nodes.map((node, index) => ({ data: { id: `cluster-${node.cluster_id}`, label: `К${node.cluster_id}`, cluster_id: node.cluster_id, size: node.n_nodes, priority_score: node.max_priority, color: roleColors[node.top_role], clusterColor: '#dbe5ec' }, position: { x: 70 + (index % 13) * 90, y: 60 + Math.floor(index / 13) * 88 } })), ...graph.edges.map((flow) => ({ data: { id: `cluster-${flow.src_cluster}-${flow.dst_cluster}`, source: `cluster-${flow.src_cluster}`, target: `cluster-${flow.dst_cluster}`, ...flow, width: Math.max(0.8, Math.log10(flow.sum_kzt) - 3) } }))]
+  return [...graph.nodes.map((node, index) => ({ data: { id: `cluster-${node.cluster_id}`, label: `К${node.cluster_id}`, cluster_id: node.cluster_id, size: node.n_nodes, priority_score: node.max_priority, has_seed_link: node.has_seed_link || node.n_seed > 0, color: roleColors[node.top_role], clusterColor: '#dbe5ec' }, position: { x: 70 + (index % 13) * 90, y: 60 + Math.floor(index / 13) * 88 } })), ...graph.edges.map((flow) => ({ data: { id: `cluster-${flow.src_cluster}-${flow.dst_cluster}`, source: `cluster-${flow.src_cluster}`, target: `cluster-${flow.dst_cluster}`, ...flow, seed_related: flow.seed_tx > 0, width: Math.max(0.8, Math.log10(flow.sum_kzt) - 3) } }))]
 }
 
 function FilterDrawer({ filters, setFilters, clusters, results, onApply, onOpen, onClose }: { filters: FilterState; setFilters: (value: FilterState) => void; clusters: Cluster[]; results: DiscoveryNode[]; onApply: (event: FormEvent) => void; onOpen: (gid: string) => Promise<void>; onClose: () => void }) {
@@ -343,9 +382,9 @@ function FilterDrawer({ filters, setFilters, clusters, results, onApply, onOpen,
   </div><div className="filter-actions"><button type="button" className="ghost" onClick={() => setFilters(emptyFilters)}>Сбросить</button><button className="primary" data-testid="apply-filters">Показать совпадения</button></div></form><div className="discovery-results" data-testid="discovery-results"><div className="result-title"><b>Совпадения</b><span>{results.length}</span></div>{results.length === 0 ? <p>Задайте условия и запустите поиск.</p> : results.map((node) => <button key={node.gid} onClick={() => void onOpen(node.gid)}><span><b>GID {formatGid(node.gid)}</b><small>{roleNames[node.role]} · кластер {node.cluster_id} · {depthLabel(node.depth)}</small></span><strong>{score100(node.priority_score)} / 100</strong></button>)}</div></aside>
 }
 
-function NodePanel({ selected, neighbors, edge, onNode, onEdge, onCloseEdge, onSummary, aiAvailable, aiBusy, aiSummary, aiError }: {
+function NodePanel({ selected, neighbors, edge, onNode, onFlowNode, onEdge, onCloseEdge, onSummary, aiAvailable, aiBusy, aiSummary, aiError }: {
   selected: NodeDetail | null; neighbors: Neighbors; edge: EdgeDetail | null
-  onNode: (gid: string) => Promise<void>; onEdge: (src: string, dst: string) => Promise<void>; onCloseEdge: () => void
+  onNode: (gid: string) => Promise<void>; onFlowNode: (gid: string) => void; onEdge: (src: string, dst: string) => Promise<void>; onCloseEdge: () => void
   onSummary: () => Promise<void>; aiAvailable: boolean; aiBusy: boolean; aiSummary: AIReply | null; aiError: string
 }) {
   const [showAllRelations, setShowAllRelations] = useState(false)
@@ -354,26 +393,28 @@ function NodePanel({ selected, neighbors, edge, onNode, onEdge, onCloseEdge, onS
   const relations = showAllRelations ? [...neighbors.incoming, ...neighbors.outgoing] : [...neighbors.incoming.slice(0, 5), ...neighbors.outgoing.slice(0, 5)]
   return <div data-testid="node-detail">
     <div className="detail-head"><div><p>Выбранный клиент</p><h2>GID {selected.gid}</h2></div><strong style={{ color: roleColors[selected.role] }}>{score100(selected.priority_score)} / 100</strong></div>
-    <div className="role-line"><i style={{ background: roleColors[selected.role] }} /><div><b>{roleNames[selected.role]} {selected.is_seed && <em className="seed-tag">seed · ранее выявленный</em>}</b><small>Выраженность роли: {score100(selected.role_score)} / 100 · кластер {selected.cluster_id}</small></div></div>
+    <div className="role-line"><i style={{ background: roleColors[selected.role] }} /><div><b>{roleNames[selected.role]} {selected.is_seed && <em className="seed-tag">стартовый · ранее выявленный</em>}</b><small>Выраженность роли: {score100(selected.role_score)} / 100 · кластер {selected.cluster_id}</small></div></div>
+    {!selected.is_seed && selected.has_seed_link && <p className="seed-link-notice">Есть прямая наблюдаемая связь с ранее выявленным стартовым клиентом. Это не доказательство причастности.</p>}
     <p className="priority-copy">Приоритет проверки: <b>{score100(selected.priority_score)} / 100</b></p>
     {selected.coverage_warning && <div className="warning" data-testid="coverage-warning"><b>Ограничение покрытия</b>{selected.coverage_warning}</div>}
     <blockquote>{selected.evidence}</blockquote>
     <div className="ai-summary"><button onClick={() => void onSummary()} disabled={!aiAvailable || aiBusy}>{aiBusy ? 'Готовлю сводку…' : 'AI-сводка · до 200 символов'}</button>{!aiAvailable && <small>Нужен OpenAIKEY в корневом .env</small>}{aiSummary && <div data-testid="ai-summary"><p>{aiSummary.summary}</p><small>Ограничение: {aiSummary.limitations[0]}</small><small>Дальше: {aiSummary.recommended_checks[0]}</small></div>}{aiError && <small className="assistant-error" role="alert">{aiError}</small>}</div>
     <div className="flow-grid"><div><small>Наблюдаемый вход</small><b>{kzt.format(selected.in_kzt)} KZT</b><span>{selected.in_deg} контрагентов · {selected.in_tx} переводов</span></div><div><small>Наблюдаемый выход</small><b>{kzt.format(selected.out_kzt)} KZT</b><span>{selected.out_deg} контрагентов · {selected.out_tx} переводов</span></div></div>
-    <dl className="metrics"><div><dt>Колено</dt><dd>{depthLabel(selected.depth)}</dd></div><div><dt>Seed-связность</dt><dd>Достижим из {selected.seed_reach_count} ветвей</dd></div><div><dt>PageRank</dt><dd>Топ {topPercent(selected.pagerank_pct)}%</dd></div><div><dt>Посредничество</dt><dd>Топ {topPercent(selected.betweenness_pct)}%</dd></div></dl>
+    <dl className="metrics"><div><dt>Колено</dt><dd>{depthLabel(selected.depth)}</dd></div><div><dt>Связь со стартовыми</dt><dd>Достижим из {selected.seed_reach_count} ветвей</dd></div><div><dt>PageRank</dt><dd>Топ {topPercent(selected.pagerank_pct)}%</dd></div><div><dt>Посредничество</dt><dd>Топ {topPercent(selected.betweenness_pct)}%</dd></div></dl>
     <div className="why-role"><h3>Почему эта роль</h3>{selected.role_components.map((component) => <div key={component.label}><span>{component.label}{component.value != null ? ` · ${component.value >= 1000 ? kzt.format(component.value) : Number(component.value.toFixed(2))}` : ''}</span><b>{component.percentile == null ? 'условие' : `топ ${topPercent(component.percentile)}%`}</b></div>)}</div>
     <div className="relations"><h3>Наблюдаемые связи</h3>{relations.map((flow) => {
       const incoming = flow.dst === selected.gid; const counterparty = incoming ? flow.src : flow.dst
-      return <div className="relation-row" key={`${flow.src}-${flow.dst}`}><button className="relation-node" aria-label={`Открыть контрагента ${counterparty}`} onClick={() => void onNode(counterparty)}><span><small>{incoming ? 'Входящий ←' : 'Исходящий →'} · {roleNames[flow.counterparty_role]} · кластер {flow.counterparty_cluster} {flow.counterparty_is_seed && '· seed'} {flow.counterparty_cluster !== selected.cluster_id && '· межкластерный'}</small><b>GID {counterparty}</b></span><strong>{kzt.format(flow.sum_kzt)} KZT · {flow.n_tx} тр.</strong></button><button className="flow-button" aria-label={`Открыть поток ${flow.src} ${flow.dst}`} onClick={() => void onEdge(flow.src, flow.dst)}>Поток</button></div>
-    })}{totalRelations > 10 && <button className="more-relations" onClick={() => setShowAllRelations(!showAllRelations)}>{showAllRelations ? 'Свернуть связи' : `Показать все ${totalRelations} связей`}</button>}</div>
-    {edge && <div className="edge-detail" data-testid="flow-detail"><div><small>Выделенный поток на графе</small><button onClick={onCloseEdge} aria-label="Закрыть поток">×</button></div><h3>{edge.src} → {edge.dst}</h3><p><b>{kzt.format(edge.sum_kzt)} KZT</b> · {edge.n_tx} переводов · {edge.first_date}—{edge.last_date}</p><div className="edge-actions"><button onClick={() => void onNode(edge.src)}>Открыть отправителя</button><button onClick={() => void onNode(edge.dst)}>Открыть получателя</button></div><ul>{edge.transactions.map((tx, index) => <li key={`${tx.date}-${index}`}><span>{tx.date}</span><b>{kzt.format(tx.sum_kzt)} KZT</b></li>)}</ul></div>}
+      const seedRelated = selected.is_seed || flow.counterparty_is_seed
+      return <div className={seedRelated ? 'relation-row seed-related' : 'relation-row'} key={`${flow.src}-${flow.dst}`}><button className="relation-node" aria-label={`Открыть контрагента ${counterparty}`} onClick={() => void onNode(counterparty)}><span><small>{incoming ? 'Входящий ←' : 'Исходящий →'} · {roleNames[flow.counterparty_role]} · кластер {flow.counterparty_cluster} {flow.counterparty_is_seed && '· ранее выявленный'} {flow.counterparty_cluster !== selected.cluster_id && '· межкластерный'}</small><b>GID {counterparty}</b></span><strong>{kzt.format(flow.sum_kzt)} KZT · {flow.n_tx} тр.</strong></button><button className="flow-button" aria-label={`Открыть поток ${flow.src} ${flow.dst}`} onClick={() => void onEdge(flow.src, flow.dst)}>Поток</button></div>
+    })}{totalRelations > 10 && <button className="more-relations" onClick={() => setShowAllRelations(!showAllRelations)}>{showAllRelations ? 'Свернуть связи' : `Открыть все наблюдаемые связи · ${totalRelations}`}</button>}</div>
+    {edge && <div className="edge-detail" data-testid="flow-detail"><div><small>Выделенный поток на графе</small><button onClick={onCloseEdge} aria-label="Закрыть поток">×</button></div><h3>{edge.src} → {edge.dst}</h3><p><b>{kzt.format(edge.sum_kzt)} KZT</b> · {edge.n_tx} переводов · {edge.first_date}—{edge.last_date}</p><div className="edge-actions"><button onClick={() => onFlowNode(edge.src)}>Открыть отправителя</button><button onClick={() => onFlowNode(edge.dst)}>Открыть получателя</button></div><ul>{edge.transactions.map((tx, index) => <li key={`${tx.date}-${index}`}><span>{tx.date}</span><b>{kzt.format(tx.sum_kzt)} KZT</b></li>)}</ul></div>}
   </div>
 }
 
-function ClusterDetail({ cluster, edge, onNode, onClusterNodes }: { cluster: Cluster | null; edge: ClusterEdge | null; onNode: (gid: string) => Promise<void>; onClusterNodes: (id: number) => Promise<void> }) {
-  if (edge) return <div className="cluster-detail" data-testid="cluster-flow-detail"><div className="detail-head"><div><p>Межкластерный поток · выделен на графе</p><h2>Кластер {edge.src_cluster} → {edge.dst_cluster}</h2></div></div><div className="cluster-stats"><div><small>Наблюдаемый объём</small><b>{kzt.format(edge.sum_kzt)} KZT</b></div><div><small>Транзакций / связей GID→GID</small><b>{edge.n_tx} / {edge.n_edges}</b></div><div><small>Отправитель — seed</small><b>{edge.seed_tx} из {edge.n_tx} транзакций · {(edge.seed_tx_share * 100).toFixed(1)}%</b></div></div><div className="edge-actions"><button onClick={() => void onClusterNodes(edge.src_cluster)}>Узлы отправителя</button><button onClick={() => void onClusterNodes(edge.dst_cluster)}>Узлы получателя</button></div><p className="caution">Агрегат наблюдаемых переводов между двумя сообществами, не вывод о едином владельце.</p></div>
+function ClusterDetail({ cluster, edge, onNode, onClusterNodes }: { cluster: Cluster | null; edge: ClusterEdge | null; onNode: (gid: string) => Promise<void>; onClusterNodes: (id: number) => void }) {
+  if (edge) return <div className="cluster-detail" data-testid="cluster-flow-detail"><div className="detail-head"><div><p>Межкластерный поток · выделен на графе</p><h2>Кластер {edge.src_cluster} → {edge.dst_cluster}</h2></div></div><div className="cluster-stats"><div><small>Наблюдаемый объём</small><b>{kzt.format(edge.sum_kzt)} KZT</b></div><div><small>Транзакций / связей GID→GID</small><b>{edge.n_tx} / {edge.n_edges}</b></div><div><small>Отправитель — ранее выявленный клиент</small><b>{edge.seed_tx} из {edge.n_tx} транзакций · {(edge.seed_tx_share * 100).toFixed(1)}%</b></div></div><div className="edge-actions"><button onClick={() => onClusterNodes(edge.src_cluster)}>Узлы отправителя</button><button onClick={() => onClusterNodes(edge.dst_cluster)}>Узлы получателя</button></div><p className="caution">Агрегат наблюдаемых переводов между двумя сообществами, не вывод о едином владельце.</p></div>
   if (!cluster) return <div className="empty-detail"><span>◎</span><h2>Выберите кластер</h2><p>Нажмите supernode или межкластерный поток, чтобы увидеть агрегированное evidence.</p></div>
-  return <div className="cluster-detail" data-testid="cluster-detail"><div className="detail-head"><div><p>Выбранное сообщество</p><h2>Кластер {cluster.cluster_id}</h2></div><strong>{score100(cluster.max_priority)} / 100</strong></div><div className="cluster-stats"><div><small>Узлов / seed</small><b>{cluster.n_nodes} / {cluster.n_seed}</b></div><div><small>Внутренний оборот</small><b>{kzt.format(cluster.sum_kzt_internal)} KZT</b></div><div><small>Исходящие транзакции от seed</small><b>{cluster.seed_out_tx} · {(cluster.seed_tx_share * 100).toFixed(1)}% всех исходящих транзакций кластера</b></div><div><small>Доминирующая роль</small><b>{roleNames[cluster.top_role]}</b></div></div><button className="cluster-open" onClick={() => void onClusterNodes(cluster.cluster_id)}>Показать узлы кластера</button><blockquote>{cluster.hypothesis}</blockquote><h3>Приоритетные GID</h3><div className="cluster-node-list">{cluster.nodes?.map((node) => <button key={node.gid} onClick={() => void onNode(node.gid)}><span>GID {node.gid}<small>{roleNames[node.role]}</small></span><b>{score100(node.priority_score)}</b></button>)}</div></div>
+  return <div className="cluster-detail" data-testid="cluster-detail"><div className="detail-head"><div><p>Выбранное сообщество</p><h2>Кластер {cluster.cluster_id}</h2></div><strong>{score100(cluster.max_priority)} / 100</strong></div><div className="cluster-stats"><div><small>Узлов / стартовых</small><b>{cluster.n_nodes} / {cluster.n_seed}</b></div><div><small>Внутренний оборот</small><b>{kzt.format(cluster.sum_kzt_internal)} KZT</b></div><div><small>Исходящие транзакции от стартовых</small><b>{cluster.seed_out_tx} · {(cluster.seed_tx_share * 100).toFixed(1)}% всех исходящих транзакций кластера</b></div><div><small>Доминирующая роль</small><b>{roleNames[cluster.top_role]}</b></div></div>{cluster.has_seed_link && <p className="seed-link-notice">В кластере есть прямая наблюдаемая связь с ранее выявленным клиентом.</p>}<button className="cluster-open" onClick={() => onClusterNodes(cluster.cluster_id)}>Показать узлы кластера</button><blockquote>{cluster.hypothesis}</blockquote><h3>Приоритетные GID</h3><div className="cluster-node-list">{cluster.nodes?.map((node) => <button key={node.gid} onClick={() => void onNode(node.gid)}><span>GID {node.gid}<small>{roleNames[node.role]}</small></span><b>{score100(node.priority_score)}</b></button>)}</div></div>
 }
 
 function AnalyticsSection({ summary, analytics, clusters, clusterGraph, tab, setTab, sort, setSort, minNodes, setMinNodes, minSeeds, setMinSeeds, onCluster, onNode, onFlow }: { summary: Summary | null; analytics: Analytics | null; clusters: Cluster[]; clusterGraph: ClusterGraph | null; tab: string; setTab: (tab: 'structure' | 'clusters' | 'signals' | 'flows') => void; sort: ClusterSortKey; setSort: (key: ClusterSortKey) => void; minNodes: string; setMinNodes: (value: string) => void; minSeeds: string; setMinSeeds: (value: string) => void; onCluster: (id: number) => Promise<void>; onNode: (gid: string) => Promise<void>; onFlow: (edge: ClusterEdge) => void }) {

@@ -207,17 +207,17 @@ def top_percent(percentile: float) -> int:
 
 def evidence(row: pd.Series) -> str:
     role_text = {
-        "consolidator": f"Признаки консолидации: {row.in_deg} плательщиков (топ {top_percent(row.in_deg_pct)}%), {row.seed_reach_count} seed-ветвей; наблюдаемый вход {compact_kzt(row.in_kzt)} KZT.",
+        "consolidator": f"Признаки консолидации: {row.in_deg} плательщиков (топ {top_percent(row.in_deg_pct)}%), {row.seed_reach_count} стартовых ветвей; наблюдаемый вход {compact_kzt(row.in_kzt)} KZT.",
         "distributor": f"Признаки распределения: {row.out_deg} получателей (топ {top_percent(row.out_deg_pct)}%), {row.out_tx} переводов; наблюдаемый выход {compact_kzt(row.out_kzt)} KZT.",
-        "transit": f"Признаки транзита: вход {compact_kzt(row.in_kzt)}, выход {compact_kzt(row.out_kzt)} KZT, соотношение {row.pass_through:.2f}; {row.seed_reach_count} seed-ветвей.",
+        "transit": f"Признаки транзита: вход {compact_kzt(row.in_kzt)}, выход {compact_kzt(row.out_kzt)} KZT, соотношение {row.pass_through:.2f}; {row.seed_reach_count} стартовых ветвей.",
         "terminal": f"Кандидат в наблюдаемый сток: {row.in_deg} плательщиков, вход {compact_kzt(row.in_kzt)} KZT; depth={row.depth}<4, исходящих не видно.",
-        "coordinator": f"Структурный кандидат: связи={row.in_deg + row.out_deg}, betweenness топ {top_percent(row.betweenness_pct)}%, достижим из {row.seed_reach_count} seed-ветвей.",
+        "coordinator": f"Структурный кандидат: связи={row.in_deg + row.out_deg}, betweenness топ {top_percent(row.betweenness_pct)}%, достижим из {row.seed_reach_count} стартовых ветвей.",
         "peripheral": f"Выраженная спецроль не выявлена: входящих связей {row.in_deg}, исходящих {row.out_deg}, наблюдаемый оборот {compact_kzt(row.in_kzt + row.out_kzt)} KZT.",
     }[row.role]
     if row.truncated_by_depth:
         role_text += " Depth=4: дальнейшие исходящие не наблюдаются."
     if row.is_seed:
-        role_text += " Seed: входящий поток неполон."
+        role_text += " Стартовый клиент: входящие неполны."
     return role_text[:200]
 
 
@@ -232,16 +232,21 @@ def build_clusters(frame: pd.DataFrame, edges: pd.DataFrame) -> pd.DataFrame:
         n_seed = int(group.is_seed.sum())
         has_flow_roles = group.role.isin(["consolidator", "distributor"]).any()
         bridge = group.betweenness.max()
-        if n_seed >= 5 and has_flow_roles:
-            hypothesis = f"Крупная группа с {n_seed} seed; выражены точки консолидации/распределения. Гипотеза для проверки."
+        if len(group) == 1:
+            hypothesis = (
+                "Ранее выявленный стартовый клиент без наблюдаемых связей; данных для гипотезы о группе недостаточно."
+                if n_seed else "Изолированный узел; данных для гипотезы о группе недостаточно."
+            )
+        elif n_seed >= 5 and has_flow_roles:
+            hypothesis = f"Группа с {n_seed} стартовыми клиентами; есть признаки консолидации/распределения. Проверить потоки."
         elif n_seed > 1 and bridge > 0:
-            hypothesis = f"Связаны {n_seed} seed и bridge-узел; возможна общая финансовая инфраструктура, требует проверки."
+            hypothesis = f"Группа с {n_seed} стартовыми клиентами и структурным посредником; связь требует проверки."
+        elif n_seed > 1:
+            hypothesis = f"Группа с {n_seed} стартовыми клиентами; назначение по одной структуре переводов не установлено."
         elif n_seed == 1:
-            hypothesis = "Группа вокруг одного seed; наблюдаемая структура требует проверки без вывода о виновности."
-        elif len(group) == 1:
-            hypothesis = "Изолированный узел в предоставленной выгрузке; данных для структурной гипотезы недостаточно."
+            hypothesis = "Группа с одним стартовым клиентом; наблюдаемые связи требуют проверки."
         else:
-            hypothesis = "Группа без seed в наблюдаемом фрагменте; роль определяется только структурой переводов."
+            hypothesis = "Группа без стартовых клиентов; назначение по одной структуре переводов не установлено."
         rows.append(
             {
                 "cluster_id": int(cluster_id),

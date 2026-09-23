@@ -7,6 +7,7 @@ import httpx
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -40,6 +41,8 @@ top_nodes = pd.read_csv(DEFAULT_OUT / "top_nodes.csv")
 role_by_gid = roles.set_index("gid")
 cluster_by_gid = roles.set_index("gid").cluster_id
 seed_gids = set(nodes.loc[nodes.is_seed, "gid"])
+seed_related_edges = edges[edges.src.isin(seed_gids) | edges.dst.isin(seed_gids)]
+seed_link_gids = set(seed_related_edges.src) | set(seed_related_edges.dst)
 role_labels = {
     "consolidator": "консолидатор", "distributor": "распределитель", "transit": "транзитный узел",
     "terminal": "кандидат в конечный узел", "coordinator": "координирующий узел", "peripheral": "периферийный узел",
@@ -49,6 +52,8 @@ role_markers = {
     "terminal": ("конечн", "сток"), "coordinator": ("координ",), "peripheral": ("перифер",),
 }
 edge_clusters = edges.assign(src_cluster=edges.src.map(cluster_by_gid), dst_cluster=edges.dst.map(cluster_by_gid))
+seed_link_clusters = set(seed_related_edges.src.map(cluster_by_gid)) | set(seed_related_edges.dst.map(cluster_by_gid))
+clusters["has_seed_link"] = clusters.cluster_id.isin(seed_link_clusters)
 edge_clusters["seed_tx"] = edge_clusters.n_tx.where(edge_clusters.src.isin(seed_gids), 0)
 cluster_out_tx = edge_clusters.groupby("src_cluster").n_tx.sum()
 cluster_seed_tx = edge_clusters.groupby("src_cluster").seed_tx.sum()
@@ -178,7 +183,7 @@ def ask_ai(request: AIRequest) -> dict[str, Any]:
             summary=f"GID {request.gid}: роль по правилам — {role_labels[row.role]}. "
                     f"Исходящие связи: {row.out_deg}; переводы: {row.out_tx}.",
             observations=[f"Наблюдаемый исходящий объём: {row.out_kzt:,.2f} KZT.".replace(",", " ")],
-            limitations=["Входящие seed-клиента неполны; сравнивать их с исходящими нельзя."],
+            limitations=["Входящие стартового клиента неполны; сравнивать их с исходящими нельзя."],
             recommended_checks=["Проверить исходящие потоки и их получателей."],
             cited_gids=[str(request.gid)],
         )
@@ -191,7 +196,7 @@ def ask_ai(request: AIRequest) -> dict[str, Any]:
             summary=f"Роль по правилам — {role_labels[row.role]}. {row.evidence}",
             observations=[f"Наблюдаемых связей: входящих {row.in_deg}, исходящих {row.out_deg}."],
             limitations=[
-                "Входящие seed-клиента неполны в исходящей выгрузке."
+                "Входящие стартового клиента неполны в исходящей выгрузке."
                 if row.is_seed else
                 "4-е колено — граница наблюдения; дальнейшие исходящие переводы неизвестны."
                 if row.truncated_by_depth else
@@ -227,6 +232,7 @@ def summary() -> dict[str, Any]:
 def get_top_nodes(limit: int = Query(50, ge=20, le=100)) -> list[dict[str, Any]]:
     selected = top_nodes.head(limit).copy()
     selected["is_seed"] = selected.gid.isin(seed_gids)
+    selected["has_seed_link"] = selected.gid.isin(seed_link_gids)
     return records(selected)
 
 
@@ -247,7 +253,7 @@ def find_nodes(
 ) -> list[dict[str, Any]]:
     if role is not None and role not in ROLES:
         raise HTTPException(status_code=422, detail=f"Unknown role: {role}")
-    selected = roles.assign(turnover=roles.in_kzt + roles.out_kzt)
+    selected = roles.assign(turnover=roles.in_kzt + roles.out_kzt, has_seed_link=roles.gid.isin(seed_link_gids))
     filters = [
         selected.priority_score >= min_priority,
         selected.in_deg >= min_in_deg,
@@ -274,7 +280,7 @@ def find_nodes(
     selected = selected[mask]
     columns = [
         "gid", "role", "role_score", "priority_score", "cluster_id", "depth", "is_seed",
-        "truncated_by_depth", "in_deg", "out_deg", "seed_reach_count", "turnover", "evidence",
+        "truncated_by_depth", "has_seed_link", "in_deg", "out_deg", "seed_reach_count", "turnover", "evidence",
     ]
     return records(selected.nlargest(limit, "priority_score")[columns])
 
@@ -290,10 +296,11 @@ def get_node(gid: int) -> dict[str, Any]:
     row = require_gid(gid)
     payload = records(pd.DataFrame([row]))[0]
     payload["gid"] = str(gid)
+    payload["has_seed_link"] = gid in seed_link_gids
     payload["coverage_warning"] = (
         "4-е колено — граница наблюдения: последующие исходящие переводы находятся за пределами выгрузки."
         if row.truncated_by_depth
-        else "Входящие переводы seed-клиента неполны в исходящей выгрузке."
+        else "Входящие переводы стартового клиента неполны в исходящей выгрузке."
         if row.is_seed
         else None
     )
@@ -422,9 +429,14 @@ def get_graph(cluster_id: int | None = None, gid: int | None = None) -> dict[str
     selected_edges = edges[edges.src.isin(gids) & edges.dst.isin(gids)]
     return {
         "nodes": records(
-            selected[
-                ["gid", "role", "role_score", "priority_score", "cluster_id", "depth", "is_seed", "truncated_by_depth"]
+            selected.assign(has_seed_link=selected.gid.isin(seed_link_gids))[
+                ["gid", "role", "role_score", "priority_score", "cluster_id", "depth", "is_seed", "truncated_by_depth", "has_seed_link"]
             ]
         ),
         "edges": records(selected_edges[["src", "dst", "sum_kzt", "n_tx"]]),
     }
+
+
+frontend_dist = DEFAULT_OUT.parent / "frontend" / "dist"
+if frontend_dist.is_dir():
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
