@@ -180,3 +180,11 @@ Secret-literal scan outside ignored `.env` -> no matches.
 
 ## Next exact action
 - Freeze optional AI/light-theme work; use `run.ps1`, `qa.ps1`, and the Russian README for the demo unless a submission blocker appears.
+
+## 2026-09-23 iteration: seed-first graph and grounded AI
+- Small initial checkpoint `9ee1e2d` added Russian judge workflow/architecture diagrams and root `npm run dev`, `npm run qa`, `npm run build` scripts.
+- Current work: `backend/src/backend/api.py`, `ai.py`, `ai_eval.py`, `backend/pyproject.toml`, `tests/test_ai.py`, `tests/test_api.py`: optional `OpenAIKEY`-gated Responses API, selected-GID fact context, strict structured output, GID/coverage checks, 8-case live smoke eval, seed/cluster transaction shares. No change to deterministic CSV role/priority calculation.
+- UI: `frontend/src/App.tsx`, `App.css`, `domain.ts`, `domain.test.ts`, `e2e/aml-workspace.spec.ts`: seed queue/rings, readable flow selection and arrows, lane-constrained drag, cluster/seed shares and tops, optional right-side AI pane. `run.ps1` waits for backend health to avoid initial API proxy failure.
+- Docs: root `README.md` covers organizer's requested sections, diagrams, local run/QA, limits, privacy, and text-only 1M-node scaling plan. No upload UI or actual 1M-node benchmark was added.
+- Observed validation: `npm run qa` PASS (pipeline 1.61s, validator, backend pytest 7, Ruff, Vitest 3, ESLint, production build, Playwright 9); `ai-eval` PASS all 8 live cases, one deterministic seed correction. Browser inspection with Playwright MCP at 1440×900 showed graph flow arrow and chat without horizontal overflow or console errors. Vite reported advisory bundle-size warning; pytest reported upstream TestClient deprecations.
+- Remaining before handoff: inspect diff/status, commit this increment meaningfully, push both local commits, then provide exact QA and launch commands to user. Do not claim public deployment or 1M-node runtime.

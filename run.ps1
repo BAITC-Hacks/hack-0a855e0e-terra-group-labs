@@ -15,9 +15,19 @@ if ($occupied) {
 $uvPath = (Get-Command uv -ErrorAction Stop).Source
 $backendProcess = Start-Process -FilePath $uvPath `
     -ArgumentList @('run', '--project', 'backend', 'backend') `
-    -WorkingDirectory $projectRoot -PassThru -NoNewWindow
+    -WorkingDirectory $projectRoot -PassThru -WindowStyle Hidden
 
 try {
+    $backendReady = $false
+    for ($attempt = 0; $attempt -lt 40; $attempt++) {
+        if ($backendProcess.HasExited) { throw "Backend exited before becoming ready (code $($backendProcess.ExitCode))." }
+        try {
+            $health = Invoke-WebRequest 'http://127.0.0.1:8000/api/health' -UseBasicParsing -TimeoutSec 1
+            if ($health.StatusCode -eq 200) { $backendReady = $true; break }
+        }
+        catch [System.Net.WebException] { Start-Sleep -Milliseconds 250 }
+    }
+    if (-not $backendReady) { throw 'Backend did not become ready on port 8000 during startup.' }
     Write-Host 'Demo: http://127.0.0.1:5173  (Ctrl+C stops both services)'
     npm run dev --prefix frontend
     if ($LASTEXITCODE -ne 0) { throw "Frontend exited with code $LASTEXITCODE" }

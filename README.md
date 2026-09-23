@@ -1,4 +1,4 @@
-# Граф денег — explainable AML network triage
+# Граф денег — объяснимая проверка AML-сети
 
 Money Graph превращает исходящую четырёхколенную транзакционную выгрузку от известных seed-клиентов в объяснимую очередь проверки для банковского AML-аналитика. Главный вопрос продукта: **кого из 2 248 GID смотреть первым и почему?**
 
@@ -9,9 +9,11 @@ Money Graph превращает исходящую четырёхколенну
 - Детерминированный parquet-to-CSV pipeline, выполняющийся примерно за **1 секунду**.
 - Все обязательные артефакты: [`nodes_roles.csv`](outputs/nodes_roles.csv), [`clusters.csv`](outputs/clusters.csv), [`top_nodes.csv`](outputs/top_nodes.csv).
 - Механический validator и расширенные семантические invariants.
-- Read-only FastAPI для поиска, фильтрации, расследования GID/рёбер и агрегированного cluster graph.
-- Russian-first AML workspace: точный поиск GID, discovery-фильтры, очередь проверки, направленный depth 0→4 graph, переходы node→flow→counterparty, percentile explainability, cluster-level view и сводная аналитика.
-- Vitest-проверки display/filter helpers и 6 Playwright E2E-сценариев primary flow.
+- FastAPI для поиска, фильтрации, расследования GID/рёбер, агрегированного графа кластеров и опционального AI-помощника.
+- Русскоязычное рабочее место: точный поиск GID, фильтры, топ-50 и отдельная очередь **81 seed**, направленный граф 0→4, переходы узел→поток→контрагент, объяснение ролей, кластерный граф и сводная аналитика.
+- Seed-узлы отмечены кольцом; выбранный поток выделяется цветом и стрелкой. В топах кластеров и межкластерных связей видна доля наблюдаемых транзакций с отправителем-seed.
+- Опциональные AI-сводка до 200 символов и чат с фактами выбранных GID; детерминированное правило не позволяет назвать обрезанный узел 4-го колена конечным получателем.
+- Vitest-проверки display/filter helpers, backend/API/AI tests и 9 Playwright E2E-сценариев.
 - Одна команда для запуска backend и frontend и одна команда для полного QA.
 
 Исходные данные: **2 248 узлов · 3 119 направленных потоков · 4 840 транзакций · 365 890 012,01 KZT наблюдаемого оборота**, 2026-07-01—2026-07-31.
@@ -32,10 +34,12 @@ flowchart LR
     G & H & I --> K[FastAPI filters + graph APIs]
     A --> K
     K --> L[React + Cytoscape AML workspace]
+    K -. выбранные факты, вопрос, максимум 6 реплик .-> N[OpenAI Responses API · gpt-4.1-mini]
+    N -. гипотеза и GID .-> K
     L --> M[Playwright primary-flow QA]
 ```
 
-Required outputs работают офлайн и не используют LLM, GPU, database или internet service. `OpenAIKEY` зарезервирован для optional grounded assistant и текущим приложением не читается.
+Обязательные CSV и графовый интерфейс работают офлайн без LLM, GPU, базы данных и платных сервисов. Только опциональные AI-сводка и чат используют `OpenAIKEY` и интернет.
 
 ```mermaid
 sequenceDiagram
@@ -82,6 +86,10 @@ Loaded 2248 nodes, 3119 edges, 4840 transactions
 SUBMISSION VALIDATION PASSED
 Pipeline completed in <5 minutes -> .../outputs
 ```
+
+Загрузка parquet через интерфейс не требуется: организаторы дают фиксированный обезличенный набор в `data_for_case/data (1)/data/`, а pipeline проверяет схему и строит три CSV. Это отдельный воспроизводимый шаг до запуска API; `npm run build` также пересчитывает CSV. Добавление произвольного upload потребовало бы нового контракта данных и сейчас не входит в задачу.
+
+Для опционального AI создайте в корне `.env` по образцу `.env.example` и укажите `OpenAIKEY`. Ключ читается только backend, в browser не передаётся. Отсутствие ключа отключает AI-кнопки и не влияет на pipeline, API графа или интерфейс.
 
 ## Запуск backend + frontend одной командой
 
@@ -138,6 +146,15 @@ flowchart LR
 ```
 
 `npm run build` пересчитывает CSV и собирает production frontend. Время пересчёта, сборки и тестов выводится командами; ограничение организаторов **менее 5 минут** относится к полному пересчёту parquet → CSV, а не к `npm run qa`.
+
+AI проверяется в двух слоях. `tests/test_ai.py` работает без сети: отсутствие ключа, неизвестный GID, выдуманный GID в ответе, сбой API и правило 4-го колена. При наличии ключа отдельный живой smoke eval запускается так:
+
+```powershell
+$env:PYTHONUTF8 = '1'
+uv run --project backend ai-eval
+```
+
+Восемь случаев покрывают распределителя, консолидатора, координирующий, транзитный, конечный и периферийный узлы, seed и границу 4-го колена. Eval измеряет задержку и проверяет Pydantic-схему (`summary`, `observations`, `limitations`, `recommended_checks`, `cited_gids`), длину сводки, GID из контекста, осторожные формулировки, одно точное число получателей и seed/boundary-ограничения. Если ключа нет, живой eval сообщает `SKIPPED`; основной QA продолжает проходить. Это проверка выбранных кейсов, а не доказательство отсутствия всех возможных ошибок модели.
 
 Те же проверки по отдельности:
 
@@ -212,12 +229,16 @@ priority = 0.25*structural_importance
 
 Основные workflow:
 
+- **Seed-first:** «Seed 81» → выбрать ранее выявленный стартовый GID → проследить исходящие потоки. Кольцо вокруг узла обозначает seed; входящие в него по условиям выборки неполны.
 - **Exact GID:** поиск → ego graph → роль/priority → percentile explanation → relationships.
 - **Discovery:** drawer «Фильтры» по role, cluster, depth, priority, turnover, degree, seed reach, seed/truncation flags → список совпадений → открыть GID.
-- **Relationship traversal:** строка связи открывает counterparty node; отдельная кнопка открывает flow и dated transactions; обе стороны flow кликабельны.
-- **Cluster investigation:** переключатель «Узлы / Кластеры» → 91 supernode → directed inter-cluster flows → cluster summary → top GID drill-down.
+- **Relationship traversal:** строка связи показывает роль, seed и переход между кластерами и открывает контрагента; отдельная кнопка выделяет направленный поток и показывает даты/суммы. Можно раскрыть все связи выбранного GID.
+- **Cluster investigation:** «Узлы / Кластеры» → 91 supernode → ярко выделенный directed inter-cluster flow → доля транзакций от seed → узлы отправителя/получателя.
 - **Network analytics:** role/depth distributions, sortable cluster table, детерминированные сигналы и top inter-cluster flows.
 - **Data coverage:** depth 4 визуально выделен как «граница наблюдения», а truncated GID получает явное предупреждение и не называется terminal.
+- **AI:** кнопка краткой сводки в карточке GID и отдельная правая панель чата; граф остаётся видимым. Ответ строится по выбранным узлам и до 16 крупнейшим инцидентным потокам, а упомянутые GID доступны для перехода.
+
+Узлы можно двигать вертикально внутри колена; горизонтальная позиция возвращается в исходную полосу после перетаскивания, чтобы подпись колена не стала ложной. Кластеры можно перемещать свободно.
 
 GID транспортируются в browser как строки: int64-значения превышают безопасный integer JavaScript, и преобразование в `Number` повредило бы identity.
 
@@ -235,6 +256,8 @@ GID транспортируются в browser как строки: int64-зн�
 | `GET /api/graph?gid=...&cluster_id=...` | Full, ego или cluster node graph |
 | `GET /api/cluster-graph` | Cluster supernodes и directed aggregated edges |
 | `GET /api/analytics` | Depth counts и deterministic signal candidates |
+| `GET /api/ai/status` | Доступность опционального AI без выдачи ключа |
+| `POST /api/ai/ask` | Краткая сводка или ответ по локально выбранным GID |
 
 Unknown GID, edge и cluster возвращают чистый `404`; неизвестная role-фильтрация — `422`.
 
@@ -256,18 +279,19 @@ Unknown GID, edge и cluster возвращают чистый `404`; неизв
 ## Пятиминутная демонстрация
 
 1. Запустить `uv run --project backend pipeline`: validator PASS и runtime около секунды.
-2. Запустить `powershell -ExecutionPolicy Bypass -File .\run.ps1` и открыть workspace.
+2. Запустить `npm run dev` и открыть workspace.
 3. Открыть **GID `100000003684369100`**: distributor score 0.988, priority 0.980, 24 входящих и 62 исходящих контрагента, 3.85M observed incoming, 8.59M KZT observed outgoing, 10 seed-ветвей. Открыть входящий flow 1.58M KZT от `100000008748914100`, затем перейти к отправителю.
 4. Через discovery filter найти распределителей с priority ≥0.7 и открыть любой результат.
 5. Найти **GID `100000003115284100`**: consolidator score 0.990, priority 0.934, 8 плательщиков, 11 seed-ветвей, 2.16M KZT observed incoming.
 6. Найти depth-boundary **GID `100000000404740100`**: depth 4, 25K incoming, no visible outgoing; UI показывает границу и не называет узел terminal.
 7. Переключиться в «Кластеры», выбрать supernode/edge и показать агрегированный directed flow, hypothesis и top GID.
-8. Открыть «Сводная аналитика сети»: structure → clusters → signals → inter-cluster flows.
-9. Попросить жюри назвать произвольный GID и повторить search → evidence → relationship traversal.
+8. В «Сводной аналитике сети» открыть топы кластеров и межкластерные потоки; выбрать строку и увидеть яркую стрелку К1→К5 с долей переводов от seed.
+9. Открыть «Seed 81» и начать обход от любого стартового клиента. При настроенном `OpenAIKEY` запросить AI-сводку и проверить её по фактам карточки.
+10. Попросить жюри назвать произвольный GID и повторить search → evidence → relationship traversal.
 
 ## Масштабирование примерно до 1M nodes
 
-Product contract и scorecards сохраняются, implementation меняется:
+Для графа порядка 1 млн узлов текущая загрузка всех CSV/parquet в память backend и всего графа в browser перестанет быть подходящей. Контракт ролей, осторожные формулировки и GID как строки сохраняются; поэтапно меняется исполнение:
 
 - columnar scan через Polars/DuckDB или analytical warehouse вместо полной загрузки pandas;
 - graph-tool, igraph или distributed graph engine для centrality/community detection;
@@ -278,6 +302,8 @@ Product contract и scorecards сохраняются, implementation меняе
 
 Database/distributed layer здесь не добавлены: 2 248 узлов помещаются в память, а pipeline уже значительно быстрее лимита.
 
+Первым реальным шагом при росте станет замер RAM/времени и переход `/api/graph` к выборке ego/cluster с пагинацией. Затем можно заменить pandas/NetworkX и хранение результатов. Число «1 млн» не заявлено как уже протестированная производительность.
+
 ## Доступность развёрнутой версии
 
 Публичной deployed-версии пока нет. Жюри запускает проект локально по командам выше; все обязательные результаты и интерфейс доступны без внешних сервисов.
@@ -286,12 +312,13 @@ Database/distributed layer здесь не добавлены: 2 248 узлов 
 
 - `.env`, virtual environments, caches, build output, archives и `node_modules` игнорируются.
 - Core analytics не отправляет organizer dataset наружу.
-- API read-only и публикует только supplied synthetic GID и derived graph metrics.
-- `OpenAIKEY` необязателен, остаётся в `.env` и не используется core.
+- Графовые API только читают данные; `POST /api/ai/ask` вызывает внешний сервис и не меняет CSV.
+- AI отправляет OpenAI только вопрос, до шести предыдущих реплик, метрики выбранных GID и до 16 выбранных потоков; полный parquet не отправляется. Неполные входящие агрегаты seed из AI-контекста удаляются. Ответ проходит строгую JSON-схему и проверку GID; недопустимое сравнение входа/выхода seed или переименование вычисленной роли заменяется детерминированной карточкой. Запрос использует `store=false`; режим хранения у провайдера следует сверять с [официальными правилами OpenAI](https://platform.openai.com/docs/guides/your-data).
+- `OpenAIKEY` необязателен, остаётся в `.env` и не используется core. AI-модель: [`gpt-4.1-mini`](https://developers.openai.com/api/docs/models/gpt-4.1-mini), вызов через уже установленный `httpx` и [Responses API](https://developers.openai.com/api/docs/guides/text).
 
 ## Сознательно не реализовано
 
-- Optional AI summary и AI evals: deterministic discovery/QA имеют больший submission value; пакет `openai` не установлен.
+- LangGraph/LangChain не используются: единственный AI-шаг получает уже вычисленный локальный контекст, а роли и деньги считаются только детерминированным кодом.
 - Light theme: low-priority cosmetic refactor после browser-verified dark demo.
 - `@xyflow/react` и `recharts`: Cytoscape и CSS evidence bars уже покрывают реальные задачи без дублирующих dependencies.
 - Temporal transit, cycles, resilience и anomaly model: bonus-функции не должны менять проверенный role/priority baseline.
@@ -299,15 +326,18 @@ Database/distributed layer здесь не добавлены: 2 248 узлов 
 ## Карта репозитория
 
 ```text
+package.json                             короткие команды npm run dev/qa/build
 run.ps1                                  один запуск backend + frontend
 qa.ps1                                   полный deterministic + browser QA
 backend/src/backend/pipeline.py          analytics + CSV export
 backend/src/backend/validate_outputs.py  submission contracts
-backend/src/backend/api.py               discovery, GID/flow/cluster APIs
+backend/src/backend/api.py               discovery, GID/flow/cluster/AI APIs
+backend/src/backend/ai.py                grounded Responses API client
+backend/src/backend/ai_eval.py           опциональный живой AI smoke eval
 frontend/src/App.tsx                     Russian-first AML workspace
 frontend/src/domain.ts                   display/filter helpers
 frontend/e2e/                            Playwright primary-flow regression
 outputs/                                 обязательные generated artifacts
-tests/                                   pipeline/API invariants
+tests/                                   pipeline/API/AI invariants
 data_for_case/                           organizer brief, starter и parquet
 ```

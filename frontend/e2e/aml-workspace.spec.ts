@@ -58,3 +58,26 @@ test('Russian-first UI и cluster-level view доступны', async ({ page })
   await expect(page.getByRole('heading', { name: 'Структура кластеров' })).toBeVisible()
   await expect(page.getByTestId('cluster-detail')).toBeVisible()
 })
+
+test('81 seed доступны отдельной очередью и отмечены в карточке', async ({ page }) => {
+  await page.getByRole('button', { name: 'Seed 81' }).click()
+  await expect(page.getByRole('heading', { name: 'Стартовые клиенты' })).toBeVisible()
+  await expect(page.locator('.queue-row')).toHaveCount(81)
+  await page.locator('.queue-row').first().click()
+  await expect(page.getByTestId('node-detail')).toContainText('seed · ранее выявленный')
+})
+
+test('межкластерный поток открывает выделенное направление и долю seed', async ({ page }) => {
+  await page.getByRole('button', { name: 'Межкластерные потоки' }).click()
+  await page.locator('button.flow-table').first().click()
+  await expect(page.getByTestId('cluster-flow-detail')).toContainText('выделен на графе')
+  await expect(page.getByTestId('cluster-flow-detail')).toContainText('Отправитель — seed')
+  await expect(page.getByLabel('Направленная сеть кластеров')).toBeVisible()
+})
+
+test('AI помощник открывается рядом с доступным графом', async ({ page }) => {
+  await page.getByRole('button', { name: 'AI помощник' }).click()
+  await expect(page.getByTestId('assistant-panel')).toBeVisible()
+  await expect(page.getByLabel('Направленная сеть транзакций')).toBeVisible()
+  await expect(page.getByLabel('Вопрос по графу')).toBeVisible()
+})

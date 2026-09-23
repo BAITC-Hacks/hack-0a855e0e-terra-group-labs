@@ -22,7 +22,7 @@ export const topPercent = (percentile: number) => Math.max(1, Math.ceil((1 - per
 export const depthLabel = (depth: number) => depth === 0 ? 'Seed / 0-е колено' : depth === 4 ? '4-е колено · граница наблюдения' : `${depth}-е колено`
 export const formatGid = (gid: string) => gid
 
-export type ClusterSortKey = 'n_nodes' | 'n_seed' | 'sum_kzt_internal' | 'max_priority'
+export type ClusterSortKey = 'n_nodes' | 'n_seed' | 'sum_kzt_internal' | 'max_priority' | 'seed_tx_share'
 export function sortClusters<T extends Record<ClusterSortKey, number> & { cluster_id: number }>(clusters: T[], key: ClusterSortKey): T[] {
   return [...clusters].sort((a, b) => b[key] - a[key] || a.cluster_id - b.cluster_id)
 }

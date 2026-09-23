@@ -38,4 +38,9 @@ def test_demo_api_contract():
     cluster_graph = client.get("/api/cluster-graph")
     assert cluster_graph.status_code == 200
     assert cluster_graph.json()["nodes"] and cluster_graph.json()["edges"]
+    assert all(0 <= item["seed_tx_share"] <= 1 for item in cluster_graph.json()["nodes"])
+    assert all(0 <= item["seed_tx_share"] <= 1 for item in cluster_graph.json()["edges"])
+    assert sum(item["seed_out_tx"] for item in cluster_graph.json()["nodes"]) == int(
+        edges.loc[edges.src.isin(roles.loc[roles.is_seed, "gid"]), "n_tx"].sum()
+    )
     assert client.get("/api/analytics").status_code == 200

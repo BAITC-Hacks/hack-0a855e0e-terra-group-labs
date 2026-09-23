@@ -17,9 +17,10 @@ describe('AML display helpers', () => {
 
   it('sorts cluster discovery deterministically', () => {
     const clusters = [
-      { cluster_id: 2, n_nodes: 4, n_seed: 1, sum_kzt_internal: 10, max_priority: 0.7 },
-      { cluster_id: 1, n_nodes: 8, n_seed: 2, sum_kzt_internal: 20, max_priority: 0.9 },
+      { cluster_id: 2, n_nodes: 4, n_seed: 1, sum_kzt_internal: 10, max_priority: 0.7, seed_tx_share: 0.5 },
+      { cluster_id: 1, n_nodes: 8, n_seed: 2, sum_kzt_internal: 20, max_priority: 0.9, seed_tx_share: 0.2 },
     ]
     expect(sortClusters(clusters, 'n_nodes').map((item) => item.cluster_id)).toEqual([1, 2])
+    expect(sortClusters(clusters, 'seed_tx_share').map((item) => item.cluster_id)).toEqual([2, 1])
   })
 })

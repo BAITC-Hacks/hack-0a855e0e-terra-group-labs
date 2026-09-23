@@ -24,6 +24,7 @@ dependencies = [
 backend = "backend:main"
 pipeline = "backend.pipeline:main"
 validate-outputs = "backend.validate_outputs:main"
+ai-eval = "backend.ai_eval:main"
 
 [build-system]
 requires = ["uv_build>=0.12.17,<0.13.0"]
