@@ -1,0 +1,8 @@
+# Project-local Codex configuration.
+# Codex loads project config only for trusted projects.
+
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@playwright/mcp@latest"]
+enabled = true
+default_tools_approval_mode = "prompt"
