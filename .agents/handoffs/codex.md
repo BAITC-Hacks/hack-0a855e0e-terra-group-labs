@@ -16,9 +16,11 @@ Build the smallest complete, reproducible AML graph-analysis pipeline and invest
 - Installed parquet/graph analytics dependencies into the backend-managed environment and ran the organizer starter successfully.
 - Implemented the deterministic one-command pipeline, generated all three required CSV artifacts, and added a contract validator plus depth-boundary regression test.
 - Added the minimal read-only FastAPI contract required by the demo: summary, priorities, node details/neighbors, edge transactions, clusters, and full/filtered graph.
+- Replaced the Vite demo with a browser-verified AML investigation workspace using the real 2,248-node graph.
+- Fixed the GID trust-boundary contract: identifiers exceed JavaScript safe integers, so API/UI transport `gid/src/dst` as exact decimal strings.
 
 ## In progress
-- Checkpointing the API, then implementing the single-screen AML investigation workspace.
+- Checkpointing the browser-verified UI, then documenting clean-start execution, scorecards, limitations, architecture, and demo cases.
 
 ## Changed files
 
@@ -37,6 +39,11 @@ Build the smallest complete, reproducible AML graph-analysis pipeline and invest
 | `backend/src/backend/api.py` | Demo-scoped read-only API over generated outputs/raw edge transactions | Ready | API contract test pass |
 | `backend/src/backend/__init__.py` | Start the local API with `uv run backend` | Ready | Import/TestClient pass |
 | `tests/test_api.py` | Summary, GID lookup, 404, edge transactions, ego graph | Ready | 2 total tests pass |
+| `frontend/src/App.tsx` | Search, priority queue, depth-banded Cytoscape map, node/edge evidence, cluster filter | Ready | Browser flow verified |
+| `frontend/src/App.css` | AML-specific responsive investigation layout | Ready | 1440x900 + default viewport inspected |
+| `frontend/src/index.css` | Minimal global tokens/reset/accessibility | Ready | Browser inspected |
+| `frontend/vite.config.ts` | Local `/api` proxy | Ready | Live integration verified |
+| `frontend/package*.json` | Add Cytoscape and its TypeScript declarations | Ready | npm build/lint pass |
 
 Use exact repository-relative paths.
 
@@ -49,6 +56,27 @@ Use exact repository-relative paths.
 - Deterministic rules: all required roles, scores, clustering, priority, evidence, and outputs work offline without an LLM.
 - AI/semantic responsibilities: optional only, grounded in deterministic graph-tool output, and reads `OpenAIKEY` if implemented.
 - Assumptions: extracted organizer parquet files may be committed for judge reproducibility; duplicate ZIPs and `__MACOSX` metadata are excluded.
+
+### UI design plan
+
+- Primary user/job: a bank AML analyst deciding which GID to inspect first and why.
+- Demo moment: search any GID, focus its directed ego network, and read role/priority/evidence plus a visible depth-4 coverage warning when applicable.
+- Visual concept: a restrained dark investigation console centered on a five-band depth map of observed money flow.
+- Palette: ink `#0b0f14` page, slate `#121922` surface, mist `#e8edf2` text, steel `#8d9aa8` secondary, amber `#f3b33d` action/selection, coral `#ef6a62` warning; role colors remain categorical.
+- Typography: system sans for UI and compact tabular numerals for GIDs/metrics; no external font dependency.
+- Shape/spacing: 4/8/12/16/24 px rhythm, 2–6 px radii, thin dividers, shadows only for the selected-node panel.
+- Desktop layout:
+
+```text
+┌ header: title · observed totals · exact GID search ┐
+├ priority queue ┬ depth 0→4 network ┬ node evidence ┤
+│ ranked rows    │ selectable flows  │ metrics/links  │
+├─────────────── coverage limitations / role legend ─┤
+└─────────────────────────────────────────────────────┘
+```
+
+- Memorable element: depth-banded directed network with an ego-focus mode; labels appear only for the selected node and its neighbors.
+- Anti-template check: no hero, fake KPI cards, unused navigation, chat, gradients, or decorative charts.
 
 ## Validation observed
 
@@ -68,6 +96,10 @@ Organizer starter run -> EXPECTED FAIL before dependency install: `ModuleNotFoun
 `cd backend; uv run ruff check src ../tests` -> PASS.
 `uv run --project backend pytest -q` after API -> PASS (2 passed in 2.01 s; upstream TestClient deprecation warnings only).
 FastAPI TestClient `/api/summary` -> 2,248 nodes, 3,119 edges, 4,840 transactions, 365,890,012.01 KZT observed.
+`cd frontend; npm run build` -> PASS (18 modules, 320 ms; expected Cytoscape chunk-size warning only).
+`cd frontend; npm run lint` -> PASS.
+Browser QA at 1440x900 -> no horizontal overflow (`innerWidth == scrollWidth == 1440`); overview readable; exact depth-4 GID `100000000404740100` opened with explicit boundary warning; edge transaction detail and cluster 1 hypothesis opened successfully.
+Browser console after fixes -> no new errors/warnings; removed invalid Cytoscape HSL syntax and custom wheel sensitivity.
 Secret-literal scan outside ignored `.env` -> no matches.
 `git check-ignore` -> `.env`, backend `.venv`, frontend `node_modules`, ZIP archives, and `__MACOSX` metadata are excluded.
 ```
@@ -96,4 +128,4 @@ Secret-literal scan outside ignored `.env` -> no matches.
 - What they need to know: TBD
 
 ## Next exact action
-- Commit/push the API, then replace the Vite demo with the browser-verified single-screen AML workspace.
+- Commit/push the UI, then finish README, architecture diagram, `.env.example`, exact run commands, scorecard thresholds, limitations, scaling notes, and final clean-start audit.

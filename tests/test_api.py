@@ -22,4 +22,4 @@ def test_demo_api_contract():
 
     graph = client.get(f"/api/graph?gid={gid}")
     assert graph.status_code == 200
-    assert gid in {node["gid"] for node in graph.json()["nodes"]}
+    assert str(gid) in {node["gid"] for node in graph.json()["nodes"]}

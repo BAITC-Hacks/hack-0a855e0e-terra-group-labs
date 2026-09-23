@@ -12,7 +12,13 @@ from .pipeline import DEFAULT_DATA, DEFAULT_OUT, ROLES
 def records(frame: pd.DataFrame) -> list[dict[str, Any]]:
     return [
         {
-            key: None if pd.isna(value) else value.item() if hasattr(value, "item") else value
+            key: None
+            if pd.isna(value)
+            else str(int(value))
+            if key in {"gid", "src", "dst"}
+            else value.item()
+            if hasattr(value, "item")
+            else value
             for key, value in row.items()
         }
         for row in frame.to_dict("records")
@@ -70,7 +76,7 @@ def require_gid(gid: int) -> pd.Series:
 def get_node(gid: int) -> dict[str, Any]:
     row = require_gid(gid)
     payload = records(pd.DataFrame([row]))[0]
-    payload["gid"] = gid
+    payload["gid"] = str(gid)
     payload["coverage_warning"] = (
         "Depth=4 boundary: later outgoing transfers are outside the provided crawl."
         if row.truncated_by_depth
