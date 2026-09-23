@@ -201,7 +201,7 @@ blockquote { margin: 12px 16px; padding: 0 0 0 10px; color: #c8d1d9; border-left
 button.table-row:hover { background: #17212a; }
 .table-head { color: var(--muted); background: #0a0f14; border-top: 0; }
 .table-row > span:last-child { color: var(--muted); }
-.table-row.cluster-table { grid-template-columns: 90px 90px 115px 105px 135px 1fr; min-width: 950px; }
+.table-row.cluster-table { grid-template-columns: 135px 105px 115px 105px 135px 1fr; min-width: 1010px; }
 .table-row.flow-table { grid-template-columns: 125px 120px 90px 80px 110px 1fr; min-width: 800px; }
 .cluster-leaders { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 12px; }
 .cluster-leaders > div { padding: 14px; background: var(--surface); border-top: 2px solid #72582c; }

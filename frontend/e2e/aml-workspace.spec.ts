@@ -83,6 +83,7 @@ test('межкластерный поток открывает выделенн�
 
 test('топ группы открывает кластер, а назад возвращает к межкластерному потоку', async ({ page }) => {
   await page.getByRole('button', { name: 'Кластеры', exact: true }).last().click()
+  await expect(page.locator('.cluster-leaders')).toContainText('ранее выявленные')
   await page.locator('.cluster-leaders button').first().click()
   await expect(page.getByTestId('cluster-detail')).toBeVisible()
   await expect(page.getByLabel('Направленная сеть кластеров')).toBeVisible()

@@ -19,7 +19,7 @@ export const roleNames: Record<string, string> = {
 export const kzt = new Intl.NumberFormat('ru-RU', { notation: 'compact', maximumFractionDigits: 1 })
 export const score100 = (value: number) => Math.round(value * 100)
 export const topPercent = (percentile: number) => Math.max(1, Math.ceil((1 - percentile) * 100 - 1e-9))
-export const depthLabel = (depth: number) => depth === 0 ? 'Seed / 0-е колено' : depth === 4 ? '4-е колено · граница наблюдения' : `${depth}-е колено`
+export const depthLabel = (depth: number) => depth === 0 ? 'Стартовые / 0-е колено' : depth === 4 ? '4-е колено · граница наблюдения' : `${depth}-е колено`
 export const formatGid = (gid: string) => gid
 
 export type ClusterSortKey = 'n_nodes' | 'n_seed' | 'sum_kzt_internal' | 'max_priority' | 'seed_tx_share'

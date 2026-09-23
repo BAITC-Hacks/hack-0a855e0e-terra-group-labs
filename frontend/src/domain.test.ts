@@ -4,7 +4,7 @@ import { depthLabel, formatGid, roleNames, sortClusters, topPercent } from './do
 describe('AML display helpers', () => {
   it('keeps large GIDs exact and renders domain labels', () => {
     expect(formatGid('100000003684369100')).toBe('100000003684369100')
-    expect(depthLabel(0)).toBe('Seed / 0-е колено')
+    expect(depthLabel(0)).toBe('Стартовые / 0-е колено')
     expect(depthLabel(4)).toContain('граница наблюдения')
     expect(roleNames.distributor).toBe('Распределитель')
   })
