@@ -56,6 +56,14 @@ Build the smallest complete, reproducible AML graph-analysis pipeline and invest
 - `tests/test_api.py`: adds discovery, GID string-safety, error, cluster-graph, and analytics regression checks.
 - `outputs/nodes_roles.csv`, `outputs/clusters.csv`: regenerated from the unchanged score formulas with the new diagnostic columns.
 - Validation: pipeline 1.03 s + validator PASS; pytest 2 passed; Ruff PASS. Only upstream FastAPI/Starlette TestClient deprecation warnings remain.
+- `frontend/src/App.tsx`, `App.css`, `domain.ts`: Russian-first discovery drawer, relationship traversal, percentile role explanation, five visual depth zones, node/cluster graph switch, cluster drill-down, and evidence-led network analytics.
+- `frontend/src/domain.test.ts`, `frontend/e2e/aml-workspace.spec.ts`, `frontend/playwright.config.ts`: 3 focused helper tests and 6 real-browser regression scenarios.
+- `run.ps1`: single local command starts both services; one `Ctrl+C` was observed to stop both and free ports 8000/5173.
+- `qa.ps1`: aggregate fail-fast pipeline/backend/frontend/browser QA command.
+- `README.md`: Russian-first setup, contracts, workflows, one-command run/QA, limitations, demo, and scaling guide.
+- Dependency decision: added dev-only `vitest` and `@playwright/test`; did not add `recharts`, `@xyflow/react`, or `openai`.
+- Browser QA via project Playwright MCP at 1440×900: `scrollWidth=1425 <= innerWidth=1440`, 0 console errors/warnings; discovery returned real matches; node→flow, cluster supernodes, analytics and depth lanes inspected.
+- Final aggregate QA: pipeline 0.96 s; validator PASS; pytest 2 passed; Vitest 3 passed; Ruff/ESLint/build PASS; Playwright E2E 6 passed; `QA CHECKS PASSED`.
 
 Use exact repository-relative paths.
 
@@ -145,6 +153,7 @@ Secret-literal scan outside ignored `.env` -> no matches.
 - API checkpoint: `9a20718`
 - Browser-verified UI checkpoint: `fa0d11a`
 - Final reproducible documentation checkpoint: `4670ad5`
+- Discovery/cluster analytics API checkpoint: `a25df2d`
 - Pushed: Yes (`origin/main`)
 
 ## Risks / blockers
@@ -159,4 +168,4 @@ Secret-literal scan outside ignored `.env` -> no matches.
 - What they need to know: follow the root README literally; core outputs are offline and deterministic; `OpenAIKEY` is optional and unused; use the three documented demo GIDs and emphasize observed evidence/data limitations rather than accusations.
 
 ## Next exact action
-- Freeze non-blocking changes; use the README demo path and fix only submission blockers.
+- Commit/push the browser-verified Russian AML workspace and freeze optional AI/light-theme work.

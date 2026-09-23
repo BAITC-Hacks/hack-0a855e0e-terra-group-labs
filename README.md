@@ -1,61 +1,65 @@
-# Money Graph — explainable AML network triage
+# Граф денег — explainable AML network triage
 
-Money Graph turns the organizer's outgoing four-hop transaction crawl into an explainable investigation queue for a bank AML analyst. It answers: **which of these 2,248 GIDs should an analyst inspect first, and why?**
+Money Graph превращает исходящую четырёхколенную транзакционную выгрузку от известных seed-клиентов в объяснимую очередь проверки для банковского AML-аналитика. Главный вопрос продукта: **кого из 2 248 GID смотреть первым и почему?**
 
-The system does not label a client guilty. A role, score, or cluster is a structural hypothesis inside the supplied graph and a prompt for deeper review.
+Система не называет клиента виновным. Роль, score, кластер и аналитический сигнал — это структурная гипотеза внутри предоставленного графа и основание для углублённой проверки.
 
-## What is delivered
+## Что реализовано
 
-- A deterministic parquet-to-CSV pipeline that completes locally in about **1 second** on the supplied data.
-- All required artifacts in [`outputs/`](outputs/): `nodes_roles.csv`, `clusters.csv`, and `top_nodes.csv`.
-- A mechanical output validator.
-- A read-only FastAPI investigation API.
-- A browser workspace with exact GID search, a directed depth 0→4 map, a ranked queue, node/edge evidence, cluster filtering, and explicit data-coverage warnings.
+- Детерминированный parquet-to-CSV pipeline, выполняющийся примерно за **1 секунду**.
+- Все обязательные артефакты: [`nodes_roles.csv`](outputs/nodes_roles.csv), [`clusters.csv`](outputs/clusters.csv), [`top_nodes.csv`](outputs/top_nodes.csv).
+- Механический validator и расширенные семантические invariants.
+- Read-only FastAPI для поиска, фильтрации, расследования GID/рёбер и агрегированного cluster graph.
+- Russian-first AML workspace: точный поиск GID, discovery-фильтры, очередь проверки, направленный depth 0→4 graph, переходы node→flow→counterparty, percentile explainability, cluster-level view и сводная аналитика.
+- Vitest-проверки display/filter helpers и 6 Playwright E2E-сценариев primary flow.
+- Одна команда для запуска backend и frontend и одна команда для полного QA.
 
-Observed source data: **2,248 nodes · 3,119 directed flows · 4,840 transactions · 365,890,012.01 KZT**, 2026-07-01 through 2026-07-31.
+Исходные данные: **2 248 узлов · 3 119 направленных потоков · 4 840 транзакций · 365 890 012,01 KZT наблюдаемого оборота**, 2026-07-01—2026-07-31.
 
-## Architecture
+## Архитектура
 
 ```mermaid
 flowchart LR
-    A[3 organizer parquet files] --> B[Schema + consistency checks]
+    A[3 organizer parquet] --> B[Schema + consistency checks]
     B --> C[Directed weighted NetworkX graph]
-    C --> D[Degrees, flows, PageRank, sampled betweenness, seed reach]
+    C --> D[Degree, flows, PageRank, sampled betweenness, seed reach]
     D --> E[Louvain clusters + deterministic role scorecards]
-    E --> F[Priority score + numeric evidence]
+    E --> F[Priority + numeric evidence]
     F --> G[nodes_roles.csv]
     F --> H[clusters.csv]
     F --> I[top_nodes.csv]
     G & H & I --> J[Mechanical validator]
-    G & H & I --> K[FastAPI]
+    G & H & I --> K[FastAPI filters + graph APIs]
     A --> K
     K --> L[React + Cytoscape AML workspace]
+    L --> M[Playwright primary-flow QA]
 ```
 
-The required outputs are fully offline and do not use an LLM, GPU, database, or internet service. `OpenAIKEY` is reserved for a future optional grounded assistant and is not read by the current application.
+Required outputs работают офлайн и не используют LLM, GPU, database или internet service. `OpenAIKEY` зарезервирован для optional grounded assistant и текущим приложением не читается.
 
-## Clean setup and run
+## Чистая установка
 
-Prerequisites used for the verified build:
+Проверенная среда:
 
-- Python 3.13
-- [uv](https://docs.astral.sh/uv/) 0.12+
-- Node.js 24 and npm 11 (Node.js 20+ should also work)
+- Python 3.13;
+- [uv](https://docs.astral.sh/uv/) 0.12+;
+- Node.js 24 и npm 11 (должен работать Node.js 20+);
+- установленный Google Chrome для локального Playwright E2E.
 
-From the repository root:
+Из корня репозитория:
 
 ```powershell
 uv sync --project backend --dev
 npm ci --prefix frontend
 ```
 
-Generate and validate all three required CSV files with one command:
+Создать и проверить все обязательные CSV одной командой:
 
 ```powershell
 uv run --project backend pipeline
 ```
 
-Expected terminal result includes:
+Ожидаемый результат:
 
 ```text
 Loaded 2248 nodes, 3119 edges, 4840 transactions
@@ -63,7 +67,19 @@ SUBMISSION VALIDATION PASSED
 Pipeline completed in <5 minutes -> .../outputs
 ```
 
-Start the demo in two terminals:
+## Запуск backend + frontend одной командой
+
+Убедитесь, что порты `8000` и `5173` свободны, затем выполните:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run.ps1
+```
+
+Открыть [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite проксирует `/api` на `http://127.0.0.1:8000`.
+
+Один `Ctrl+C` в этом терминале останавливает оба сервиса и освобождает оба порта. Vite использует `strictPort`, поэтому не переезжает незаметно на `5174`, если старый frontend остался запущен.
+
+Отдельный запуск для debugging по-прежнему доступен:
 
 ```powershell
 # terminal 1
@@ -73,66 +89,81 @@ uv run --project backend backend
 npm run dev --prefix frontend
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite proxies `/api` to `http://127.0.0.1:8000`.
+После повторного запуска pipeline перезапустите backend: API загружает CSV в память при старте.
 
-Environment setup is optional. If a future assistant is enabled, copy `.env.example` to `.env` and set `OpenAIKEY`; the deterministic pipeline, API, and UI do not require it.
+## Одна команда полного QA
 
-## Verification commands
+При свободных портах `8000` и `5173`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\qa.ps1
+```
+
+Команда последовательно запускает:
+
+1. pipeline;
+2. output validator;
+3. backend pytest;
+4. Ruff;
+5. frontend Vitest;
+6. ESLint;
+7. production build;
+8. Playwright E2E с автоматическим запуском backend/frontend.
+
+При успехе выводится `QA CHECKS PASSED`. Ошибки не скрываются.
+
+Те же проверки по отдельности:
 
 ```powershell
 uv run --project backend validate-outputs
 uv run --project backend pytest -q
 uv run --project backend ruff check backend/src tests
+npm run test --prefix frontend
 npm run lint --prefix frontend
 npm run build --prefix frontend
+npm run test:e2e --prefix frontend
 ```
-
-Latest observed results:
-
-- Pipeline: **0.90 s**, validation passed.
-- Tests: **2 passed** (only upstream TestClient deprecation warnings).
-- Ruff and ESLint: passed.
-- Vite production build: passed.
-- Browser: overview, arbitrary GID search, depth-4 warning, edge details, and cluster filter verified at 1440×900 with no horizontal overflow or new console errors.
 
 ## Output contracts
 
 ### `outputs/nodes_roles.csv`
 
-Exactly 2,248 unique source GIDs. Required columns are `gid`, `role`, `role_score`, `cluster_id`, `priority_score`, and `evidence`. Diagnostic columns expose the metrics that produced the result: degrees, observed amounts and transaction counts, PageRank, betweenness, seed reach, pass-through ratio, depth, seed status, and truncation status.
+Ровно 2 248 уникальных source GID. Обязательные колонки: `gid`, `role`, `role_score`, `cluster_id`, `priority_score`, `evidence`.
+
+Дополнительные диагностические колонки содержат degree, наблюдаемые суммы/транзакции, PageRank, betweenness, seed reach, pass-through, depth, seed/truncation flags, percentile signals и score каждой роли. Это позволяет объяснить роль любого случайного GID без повторного вычисления.
 
 ### `outputs/clusters.csv`
 
-One row per Louvain community, including isolated nodes: `cluster_id`, `n_nodes`, `n_seed`, `sum_kzt_internal`, `top_gids`, and a deterministic, cautious `hypothesis`.
+Одна строка на Louvain community, включая isolates: `cluster_id`, `n_nodes`, `n_seed`, `sum_kzt_internal`, `top_gids`, `hypothesis`. Дополнительно: `max_priority`, `avg_priority`, `top_role`.
 
 ### `outputs/top_nodes.csv`
 
-The top 50 nodes sorted by `priority_score` descending: `rank`, `gid`, `role`, `priority_score`, and a numeric `why`.
+Top 50, отсортированные по `priority_score` descending: `rank`, `gid`, `role`, `priority_score`, `why`.
 
-## Deterministic analytics
+## Детерминированная аналитика
 
-All percentile features rank positive observed values from 0 to 1; a zero remains zero. The graph is directed for role/flow metrics. Louvain intentionally uses the undirected weighted projection because communities answer “which nodes are densely connected,” not “which direction did money move”; direction remains preserved everywhere else. Louvain and sampled betweenness use seed `42`.
+Все положительные raw metrics переводятся в percentile rank от 0 до 1; ноль остаётся нулём. Направленный граф используется для денежных потоков и ролей. Только community detection использует ненаправленную weighted projection, потому что отвечает на вопрос «какие узлы плотно связаны». Louvain и sampled betweenness используют фиксированный `seed=42`.
 
-Betweenness samples 300 source nodes. This is deterministic, completes quickly on a normal laptop, and is documented rather than presented as an exact centrality value.
+Betweenness использует 300 source nodes. Это воспроизводимая аппроксимация, которая сохраняет laptop-fast pipeline; значение не выдаётся за точную глобальную centrality.
 
-### Role rules
+### Правила ролей
 
-Each specialist score is clipped to `[0,1]`. Ineligible roles score zero. The highest eligible score is primary; ties follow the stable order shown below. If every specialist score is below **0.48**, the node is `peripheral` with confidence `1 - max_specialist_score`. `coordinator` additionally requires its own score to be at least **0.55**, preventing it from absorbing ordinary flow roles.
+Каждый specialist score ограничен `[0,1]`. Ineligible role получает ноль. Выбирается максимальный eligible score со стабильным порядком tie-breaking. Если все specialist scores ниже **0.48**, роль становится `peripheral` с выраженностью `1 - max_specialist_score`. `coordinator` дополнительно требует собственный score ≥ **0.55**.
 
-| Role | Eligibility | Scorecard | Interpretation and caveat |
+| Role enum | Eligibility | Scorecard | Интерпретация и caveat |
 |---|---|---|---|
-| `consolidator` | `in_deg >= 2` | 35% incoming-degree percentile + 30% seed-reach percentile + 20% incoming-KZT percentile + 15% PageRank percentile | Observed funds converge from multiple sources. This is not proof of ownership or control. |
-| `distributor` | `out_deg >= 3` | 40% outgoing-degree percentile + 25% outgoing-KZT percentile + 20% outgoing-tx percentile + 15% betweenness percentile | Observed funds fan out to several recipients. |
-| `transit` | non-seed with both incoming and outgoing flows | 25% minimum in/out-degree percentile + 30% closeness of pass-through to 1 + 20% amount balance + 15% tx-count balance + 10% betweenness percentile | Observed inflow and outflow are similar. Seed nodes are excluded because their incoming side is incomplete. |
-| `terminal` | `in_deg > 0`, `out_deg == 0`, and **`depth < 4`** | 35% incoming-KZT percentile + 30% incoming-degree percentile + 20% incoming-tx percentile + 15% seed-reach percentile | Candidate observed sink only within the supplied graph. A depth-4 no-outgoing node is never eligible. |
-| `coordinator` | total degree ≥3 and score ≥0.55 | 30% betweenness percentile + 25% PageRank percentile + 20% seed-reach percentile + 15% total-degree percentile + 10% turnover percentile | Structurally important coordination candidate, not an attribution of criminal leadership. |
-| `peripheral` | all specialist scores <0.48 | `1 - max_specialist_score` | No strong specialist pattern in the observed graph. A high confidence means the absence of a strong specialist signal is clear. |
+| `consolidator` | `in_deg >= 2` | 35% incoming-degree percentile + 30% seed-reach + 20% incoming-KZT + 15% PageRank | Наблюдаемые средства сходятся из нескольких источников; не доказательство контроля. |
+| `distributor` | `out_deg >= 3` | 40% outgoing-degree + 25% outgoing-KZT + 20% outgoing-tx + 15% betweenness | Наблюдаемые средства расходятся нескольким получателям. |
+| `transit` | non-seed, есть вход и выход | 25% min in/out degree + 30% pass-through closeness + 20% amount balance + 15% tx balance + 10% betweenness | Наблюдаемые вход и выход похожи; seed исключены из-за неполного incoming. |
+| `terminal` | `in_deg > 0`, `out_deg == 0`, **`depth < 4`** | 35% incoming-KZT + 30% incoming-degree + 20% incoming-tx + 15% seed-reach | Кандидат в сток только внутри выгрузки; depth 4 никогда не становится terminal из-за отсутствия видимого выхода. |
+| `coordinator` | total degree ≥3 и score ≥0.55 | 30% betweenness + 25% PageRank + 20% seed-reach + 15% degree + 10% turnover | Структурно значимый узел, а не атрибуция организатора. |
+| `peripheral` | все specialist scores <0.48 | `1 - max_specialist_score` | Выраженный специализированный паттерн не найден. |
 
-`role_score` expresses how strongly the selected structural role is observed. It is not the probability that a client committed an offense.
+`role_score` в UI называется «выраженность роли», а не probability/confidence of guilt.
 
 ### Priority score
 
-Priority is separate from role confidence and estimates **analytical value of review inside the observed network**:
+Priority отдельно от роли оценивает **аналитическую ценность проверки внутри наблюдаемой сети**:
 
 ```text
 structural_importance = 0.40*PageRank_pct + 0.40*betweenness_pct + 0.20*degree_pct
@@ -144,78 +175,108 @@ priority = 0.25*structural_importance
          + 0.15*betweenness_pct
 ```
 
-Every top-list explanation includes concrete role confidence, seed reach, degree, observed turnover, and betweenness.
+Высокий priority — рекомендация внимания аналитика, не вероятность нарушения.
 
-### Clusters
+### Кластеры
 
-`networkx.community.louvain_communities` runs on the weighted undirected projection. Communities are deterministically ordered by size then smallest GID; every isolate receives a cluster. Cluster hypotheses are templates based on seed count, internal turnover, specialist roles, and bridge presence. They never invent people, organizations, or activity outside the dataset.
+`networkx.community.louvain_communities` работает на weighted undirected projection. Communities детерминированно сортируются по размеру и минимальному GID. Каждый isolate получает cluster ID. Hypothesis строится шаблоном по seed count, внутреннему обороту, ролям и bridge-сигналу; система не выдумывает людей или организации.
 
-## API used by the demo
+## AML workspace
 
-| Endpoint | Purpose |
+Основные workflow:
+
+- **Exact GID:** поиск → ego graph → роль/priority → percentile explanation → relationships.
+- **Discovery:** drawer «Фильтры» по role, cluster, depth, priority, turnover, degree, seed reach, seed/truncation flags → список совпадений → открыть GID.
+- **Relationship traversal:** строка связи открывает counterparty node; отдельная кнопка открывает flow и dated transactions; обе стороны flow кликабельны.
+- **Cluster investigation:** переключатель «Узлы / Кластеры» → 91 supernode → directed inter-cluster flows → cluster summary → top GID drill-down.
+- **Network analytics:** role/depth distributions, sortable cluster table, детерминированные сигналы и top inter-cluster flows.
+- **Data coverage:** depth 4 визуально выделен как «граница наблюдения», а truncated GID получает явное предупреждение и не называется terminal.
+
+GID транспортируются в browser как строки: int64-значения превышают безопасный integer JavaScript, и преобразование в `Number` повредило бы identity.
+
+## API
+
+| Endpoint | Назначение |
 |---|---|
-| `GET /api/summary` | Dataset totals and role counts |
-| `GET /api/top-nodes` | Ranked analyst queue |
-| `GET /api/nodes/{gid}` | Role, scores, metrics, evidence, and coverage warning |
-| `GET /api/nodes/{gid}/neighbors` | Incoming and outgoing relationships |
-| `GET /api/edges/{src}/{dst}` | Aggregate flow and dated individual transactions |
-| `GET /api/clusters` / `{cluster_id}` | Cluster summaries and top nodes |
-| `GET /api/graph?gid=...&cluster_id=...` | Full, ego, or cluster graph payload |
+| `GET /api/summary` | Totals и role counts |
+| `GET /api/top-nodes` | Очередь проверки |
+| `GET /api/nodes?...` | Discovery filters |
+| `GET /api/nodes/{gid}` | Роль, score, percentile components, evidence, coverage warning |
+| `GET /api/nodes/{gid}/neighbors` | Направленные связи и cluster контрагента |
+| `GET /api/edges/{src}/{dst}` | Агрегированный flow и dated transactions |
+| `GET /api/clusters` / `{cluster_id}` | Cluster summaries и top nodes |
+| `GET /api/graph?gid=...&cluster_id=...` | Full, ego или cluster node graph |
+| `GET /api/cluster-graph` | Cluster supernodes и directed aggregated edges |
+| `GET /api/analytics` | Depth counts и deterministic signal candidates |
 
-GIDs are transported to the browser as strings. They are int64 values larger than JavaScript's safe-integer range; converting them to `Number` would corrupt identity.
+Unknown GID, edge и cluster возвращают чистый `404`; неизвестная role-фильтрация — `422`.
 
-## Data limitations and algorithm impact
+## Ограничения данных и влияние на алгоритм
 
-| Limitation | What the system does about it |
+| Ограничение | Что делает система |
 |---|---|
-| Outgoing-only four-hop crawl | Describes every amount as “observed”; never claims a complete balance or customer history. |
-| Depth-4 truncation | Marks `truncated_by_depth`; a depth-4 node with no visible outgoing edge is never eligible for `terminal`; the UI shows a prominent warning. |
-| Seed incoming is incomplete | Excludes seed nodes from the pass-through/transit rule and appends a seed caveat to evidence. |
-| Partial graph balance | Uses `in_kzt`/`out_kzt` only within this graph; does not call their difference income, spend, or balance. |
-| Transfers below 5,000 KZT absent | Makes no claim that small transfers or structuring are absent. |
-| Intrabank transfers only | Makes no claim about flows at other banks, cash, crypto, or external rails. |
-| July 2026 only | Scores describe this one-month snapshot, not stable long-term behavior. |
-| No PII or customer profile | Uses synthetic GID as the only identity key; creates no fake names, ages, income, or organizations. |
-| No role ground truth | Uses explainable scorecards and exposes metrics; does not report accuracy or treat roles as labels of fact. |
-| Heuristic scores | Treats role and priority as review hypotheses, never guilt probabilities. |
+| Только исходящий four-hop crawl | Все суммы называются наблюдаемыми; нет заявлений о полной истории клиента. |
+| Обрезание depth 4 | `truncated_by_depth`; depth-4 без видимого выхода не eligible для `terminal`; UI показывает warning. |
+| Incoming seed неполон | Seed исключены из transit/pass-through role rule; evidence содержит caveat. |
+| Частичный баланс графа | `in_kzt/out_kzt` не называются доходом, расходом или реальным остатком. |
+| Переводы ниже 5 000 KZT отсутствуют | Нет вывода, что мелкие переводы или structuring отсутствуют. |
+| Только intrabank | Нет выводов о других банках, cash, crypto или внешних rails. |
+| Только июль 2026 | Score описывает месячный snapshot, а не стабильное долгосрочное поведение. |
+| Нет PII/customer profile | Единственный identity key — synthetic GID; fake PII не создаётся. |
+| Нет role ground truth | Используются explainable scorecards; accuracy не заявляется. |
+| Heuristic scores | Role/priority — гипотезы prioritization, не guilt probability. |
 
-## Five-minute demo path
+## Пятиминутная демонстрация
 
-1. Run `uv run --project backend pipeline` and point out the validator pass and sub-second runtime.
-2. Open the workspace: the first view explains the 81-seed, four-hop shape through horizontal depth bands.
-3. Select top priority **GID `100000003684369100`**: distributor score 0.988, priority 0.980, 24 incoming and 62 outgoing counterparties, 3.85M observed incoming and 8.59M KZT observed outgoing, reached by 10 seeds. Open its 1.58M KZT incoming edge from `100000008748914100`.
-4. Search **GID `100000003115284100`**: consolidator score 0.990, priority 0.934, 8 incoming counterparties, 11 reachable seeds, 2.16M KZT observed incoming. Open the 622K KZT edge from `100000000343175100`.
-5. Search depth-boundary example **GID `100000000404740100`**: depth 4, one 25K incoming flow and no visible outgoing flow. The UI explicitly says the crawl ended and does **not** call it terminal.
-6. Filter cluster 1 and show its node/seed count, observed internal turnover, and cautious hypothesis.
-7. Ask for any arbitrary GID and repeat search → ego map → node evidence → relationship → dated transactions.
+1. Запустить `uv run --project backend pipeline`: validator PASS и runtime около секунды.
+2. Запустить `powershell -ExecutionPolicy Bypass -File .\run.ps1` и открыть workspace.
+3. Открыть **GID `100000003684369100`**: distributor score 0.988, priority 0.980, 24 входящих и 62 исходящих контрагента, 3.85M observed incoming, 8.59M KZT observed outgoing, 10 seed-ветвей. Открыть входящий flow 1.58M KZT от `100000008748914100`, затем перейти к отправителю.
+4. Через discovery filter найти распределителей с priority ≥0.7 и открыть любой результат.
+5. Найти **GID `100000003115284100`**: consolidator score 0.990, priority 0.934, 8 плательщиков, 11 seed-ветвей, 2.16M KZT observed incoming.
+6. Найти depth-boundary **GID `100000000404740100`**: depth 4, 25K incoming, no visible outgoing; UI показывает границу и не называет узел terminal.
+7. Переключиться в «Кластеры», выбрать supernode/edge и показать агрегированный directed flow, hypothesis и top GID.
+8. Открыть «Сводная аналитика сети»: structure → clusters → signals → inter-cluster flows.
+9. Попросить жюри назвать произвольный GID и повторить search → evidence → relationship traversal.
 
-## Scaling to about one million nodes
+## Масштабирование примерно до 1M nodes
 
-The product contract and scorecards remain, but the implementation would change:
+Product contract и scorecards сохраняются, implementation меняется:
 
-- Scan parquet with Polars/DuckDB or an analytical warehouse rather than loading all rows into pandas.
-- Use graph-tool, igraph, or a distributed graph engine for centrality and community detection.
-- Replace the 300-node approximation with validated sampling or batch/distributed approximations.
-- Materialize node/edge aggregates and clusters; paginate API responses and request only server-side ego/cluster tiles.
-- Render level-of-detail supernodes in the browser instead of sending the full graph.
+- columnar scan через Polars/DuckDB или analytical warehouse вместо полной загрузки pandas;
+- graph-tool, igraph или distributed graph engine для centrality/community detection;
+- validated sampling/distributed approximations вместо текущего sampled betweenness;
+- materialized node/edge/cluster aggregates и incremental recalculation;
+- API pagination и server-side ego/cluster tiles;
+- level-of-detail supernodes вместо передачи полного graph в browser.
 
-No database or distributed layer is added here because 2,248 nodes fit comfortably in memory and the required pipeline already completes well below five minutes.
+Database/distributed layer здесь не добавлены: 2 248 узлов помещаются в память, а pipeline уже значительно быстрее лимита.
 
-## Privacy and security
+## Privacy и security
 
-- `.env`, virtual environments, caches, build output, archives, and `node_modules` are ignored.
-- Core analytics never sends the organizer dataset outside the machine.
-- The API is read-only and exposes only the supplied synthetic GIDs and graph-derived metrics.
-- `OpenAIKEY` is optional, stays in `.env`, and is not used by the submitted core.
+- `.env`, virtual environments, caches, build output, archives и `node_modules` игнорируются.
+- Core analytics не отправляет organizer dataset наружу.
+- API read-only и публикует только supplied synthetic GID и derived graph metrics.
+- `OpenAIKEY` необязателен, остаётся в `.env` и не используется core.
 
-## Repository map
+## Сознательно не реализовано
+
+- Optional AI summary и AI evals: deterministic discovery/QA имеют больший submission value; пакет `openai` не установлен.
+- Light theme: low-priority cosmetic refactor после browser-verified dark demo.
+- `@xyflow/react` и `recharts`: Cytoscape и CSS evidence bars уже покрывают реальные задачи без дублирующих dependencies.
+- Temporal transit, cycles, resilience и anomaly model: bonus-функции не должны менять проверенный role/priority baseline.
+
+## Карта репозитория
 
 ```text
-backend/src/backend/pipeline.py          deterministic analytics + CSV export
-backend/src/backend/validate_outputs.py  submission contract checks
-backend/src/backend/api.py               read-only demo API
-frontend/src/App.tsx                     investigation workspace
-outputs/                                 required generated artifacts
-tests/                                   pipeline and API contract checks
-data_for_case/                           organizer brief, starter, README, parquet
+run.ps1                                  один запуск backend + frontend
+qa.ps1                                   полный deterministic + browser QA
+backend/src/backend/pipeline.py          analytics + CSV export
+backend/src/backend/validate_outputs.py  submission contracts
+backend/src/backend/api.py               discovery, GID/flow/cluster APIs
+frontend/src/App.tsx                     Russian-first AML workspace
+frontend/src/domain.ts                   display/filter helpers
+frontend/e2e/                            Playwright primary-flow regression
+outputs/                                 обязательные generated artifacts
+tests/                                   pipeline/API invariants
+data_for_case/                           organizer brief, starter и parquet
 ```

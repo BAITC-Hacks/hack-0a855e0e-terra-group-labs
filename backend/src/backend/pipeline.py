@@ -202,7 +202,7 @@ def compact_kzt(value: float) -> str:
 
 
 def top_percent(percentile: float) -> int:
-    return max(1, math.ceil((1 - float(percentile)) * 100))
+    return max(1, math.ceil((1 - float(percentile)) * 100 - 1e-9))
 
 
 def evidence(row: pd.Series) -> str:
